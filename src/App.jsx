@@ -372,6 +372,52 @@ function QuoteComparison({quote,onUpdate,phaseName}) {
 }
 
 // ── TASK DETAIL ────────────────────────────────────────────────────────────
+function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask}) {
+  const subtasks = tasks.filter(t=>t.parent_task_id===taskId);
+  const [addingSub, setAddingSub] = useState(false);
+  const subRef = useRef(null);
+  useEffect(()=>{ if(addingSub && subRef.current) subRef.current.focus(); },[addingSub]);
+
+  const commitSub = () => {
+    const title = (subRef.current?.value||"").trim();
+    if(!title) { setAddingSub(false); return; }
+    const dbTask = {project_id:projectId, title, parent_task_id:taskId, assignee:"", start_date:null, end_date:null, status:"todo", notes:"", sort_order:0};
+    if(subRef.current) subRef.current.value = "";
+    setAddingSub(false);
+    sbInsertRow("tasks", dbTask).then(rows=>{ if(rows?.[0]) onAddTask(mapTask(rows[0])); }).catch(console.error);
+  };
+
+  return (
+    <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,marginBottom:16}}>
+      <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <p style={{fontSize:13,fontWeight:600,color:C.text}}>Subtasks <span style={{fontWeight:400,color:C.muted,fontSize:12}}>{subtasks.filter(t=>t.status==="complete").length}/{subtasks.length}</span></p>
+        <button onClick={()=>setAddingSub(true)} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>+ Add</button>
+      </div>
+      {subtasks.map((st,i)=>(
+        <div key={st.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:(i<subtasks.length-1||addingSub)?`1px solid ${C.divider}`:"none"}}
+          onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+          <div onClick={()=>{const ns=st.status==="complete"?"todo":"complete";onUpdateTask(st.id,t=>({...t,status:ns}));sbPatch("tasks",st.id,{status:ns}).catch(console.error);}}
+            style={{width:13,height:13,borderRadius:2,flexShrink:0,cursor:"pointer",border:"1.5px solid "+(st.status==="complete"?C.green:C.faint),background:st.status==="complete"?C.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {st.status==="complete"&&<svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </div>
+          <span style={{fontSize:13,flex:1,color:st.status==="complete"?C.muted:C.text,textDecoration:st.status==="complete"?"line-through":"none"}}>{st.title}</span>
+          {st.assignee&&<span style={{fontSize:11,color:C.muted}}>{st.assignee}</span>}
+        </div>
+      ))}
+      {addingSub&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px"}}>
+          <div style={{width:13,height:13,borderRadius:2,flexShrink:0,border:"1.5px solid "+C.faint}}/>
+          <input ref={subRef} defaultValue="" placeholder="Subtask name"
+            onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitSub();} if(e.key==="Escape")setAddingSub(false);}}
+            onBlur={()=>{const v=(subRef.current?.value||"").trim();if(v)commitSub();else setAddingSub(false);}}
+            style={{flex:1,fontSize:13,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",color:C.text,padding:0}}/>
+        </div>
+      )}
+      {subtasks.length===0&&!addingSub&&<p style={{padding:"12px 16px",fontSize:12,color:C.faint}}>No subtasks yet.</p>}
+    </div>
+  );
+}
+
 function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onAddEvent,team}) {
   const [addedToCalendar, setAddedToCalendar] = useState(false);
   const convertToEvent = () => {
@@ -458,50 +504,7 @@ function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onA
         </div>
       </div>
 
-      {/* Subtasks */}
-      {(()=>{
-        const subtasks=(tasks||[]).filter(t=>t.parent_task_id===task.id);
-        const [addingSub,setAddingSub]=React.useState(false);
-        const subRef=React.useRef(null);
-        React.useEffect(()=>{if(addingSub&&subRef.current)subRef.current.focus();},[addingSub]);
-        const commitSub=()=>{
-          const title=(subRef.current?.value||"").trim();
-          if(!title){setAddingSub(false);return;}
-          const dbTask={project_id:task.project_id,title,parent_task_id:task.id,assignee:"",start_date:null,end_date:null,status:"todo",notes:"",sort_order:0};
-          if(subRef.current)subRef.current.value="";
-          setAddingSub(false);
-          sbInsertRow("tasks",dbTask).then(rows=>{if(rows?.[0])onAddTask(mapTask(rows[0]));}).catch(console.error);
-        };
-        return (
-          <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,marginBottom:16}}>
-            <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <p style={{fontSize:13,fontWeight:600,color:C.text}}>Subtasks</p>
-              <button onClick={()=>setAddingSub(true)} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>+ Add</button>
-            </div>
-            {subtasks.map((st,i)=>(
-              <div key={st.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:(i<subtasks.length-1||addingSub)?`1px solid ${C.divider}`:"none"}}
-                onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div onClick={()=>{const ns=st.status==="complete"?"todo":"complete";onUpdateTask(st.id,t=>({...t,status:ns}));sbPatch("tasks",st.id,{status:ns}).catch(console.error);}}
-                  style={{width:13,height:13,borderRadius:2,flexShrink:0,cursor:"pointer",border:"1.5px solid "+(st.status==="complete"?C.green:C.faint),background:st.status==="complete"?C.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  {st.status==="complete"&&<svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                </div>
-                <span style={{fontSize:13,flex:1,color:st.status==="complete"?C.muted:C.text,textDecoration:st.status==="complete"?"line-through":"none"}}>{st.title}</span>
-                {st.assignee&&<span style={{fontSize:11,color:C.muted}}>{st.assignee}</span>}
-              </div>
-            ))}
-            {addingSub&&(
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px"}}>
-                <div style={{width:13,height:13,borderRadius:2,flexShrink:0,border:"1.5px solid "+C.faint}}/>
-                <input ref={subRef} defaultValue="" placeholder="Subtask name"
-                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitSub();} if(e.key==="Escape")setAddingSub(false);}}
-                  onBlur={()=>{const v=(subRef.current?.value||"").trim();if(v)commitSub();else setAddingSub(false);}}
-                  style={{flex:1,fontSize:13,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",color:C.text,padding:0}}/>
-              </div>
-            )}
-            {subtasks.length===0&&!addingSub&&<p style={{padding:"12px 16px",fontSize:12,color:C.faint}}>No subtasks yet.</p>}
-          </div>
-        );
-      })()}
+      <SubtaskPanel taskId={task.id} projectId={task.project_id} tasks={tasks||[]} onUpdateTask={onUpdateTask} onAddTask={onAddTask}/>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
