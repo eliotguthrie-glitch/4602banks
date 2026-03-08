@@ -767,8 +767,11 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(null);
   const [editing,setEditing]=useState(false);
+  const [addingTask,setAddingTask]=useState(false);
+  const projectTaskRef=useRef(null);
   const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual"});
   const [confirmDelete,setConfirmDelete]=useState(false);
+  useEffect(()=>{ if(addingTask && projectTaskRef.current) projectTaskRef.current.focus(); },[addingTask]);
   const projectTasks=tasks.filter(t=>t.project_id===phase.id);
   const taskDerivedDates = useMemo(()=>{
     const ts=projectTasks.filter(t=>t.start&&t.end);
@@ -802,6 +805,17 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
   const doDelete = () => {
     onDeleteProject(phase.id);
     onNavigate("dashboard");
+  };
+
+  const quickAddTask = () => {
+    const title = (projectTaskRef.current?.value||"").trim();
+    if(!title) { setAddingTask(false); return; }
+    const dbTask = {project_id:phase.id, title, assignee:"", start_date:null, end_date:null, status:"todo", notes:"", sort_order:0};
+    if(projectTaskRef.current) projectTaskRef.current.value = "";
+    setAddingTask(false);
+    sbInsertRow("tasks", dbTask).then(rows=>{
+      if(rows?.[0]) onUpdateTask(rows[0].id, ()=>mapTask(rows[0]), true);
+    }).catch(err=>alert("Failed: "+err.message));
   };
 
   const tabs=[{id:"tasks",label:"Tasks"},{id:"quotes",label:"Quotes"},{id:"photos",label:"Photos"},{id:"notes",label:"Notes"},{id:"ai",label:"✦ AI"}];
@@ -924,7 +938,10 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
           <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
             <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <p style={{fontSize:13,fontWeight:600,color:C.text}}>Tasks</p>
-              <span style={{fontSize:11,color:C.muted}}>{projectTasks.filter(t=>t.status==="complete").length}/{projectTasks.length} done</span>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:11,color:C.muted}}>{projectTasks.filter(t=>t.status==="complete").length}/{projectTasks.length} done</span>
+                <button onClick={()=>setAddingTask(true)} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>+ Add task</button>
+              </div>
             </div>
             {projectTasks.map((t,i)=>(
               <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<projectTasks.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
@@ -941,6 +958,22 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
             ))}
+            {addingTask&&(
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderTop:`1px solid ${C.divider}`}}>
+                <div style={{width:15,height:15,borderRadius:3,flexShrink:0,border:"1.5px solid "+C.faint}}/>
+                <input ref={projectTaskRef} defaultValue="" placeholder="Task name — Enter to save"
+                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();quickAddTask();} if(e.key==="Escape") setAddingTask(false);}}
+                  style={{flex:1,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",fontSize:13,color:C.text,padding:0}}/>
+                <button onMouseDown={e=>{e.preventDefault();quickAddTask();}} style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:14,padding:"0 4px"}}>✓</button>
+                <button onMouseDown={e=>{e.preventDefault();setAddingTask(false);}} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 4px"}}>✕</button>
+              </div>
+            )}
+            {!addingTask&&(
+              <button onClick={()=>setAddingTask(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:13,width:"100%",textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.color=C.muted} onMouseLeave={e=>e.currentTarget.style.color=C.faint}>
+                <span style={{fontSize:15,lineHeight:1}}>+</span> Add task
+              </button>
+            )}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
@@ -1992,11 +2025,11 @@ function ProjectsView({phases, projects, tasks, expenses, onNavigate, onAddProje
   const [saving, setSaving] = useState(false);
 
   const addProject = () => {
-    if(!form.name||!form.start||!form.end) return;
+    if(!form.name) return;
     setSaving(true);
     const dbProject = {
       name:form.name, status:form.status, budget:parseInt(form.budget)||0,
-      start_date:form.start, end_date:form.end, notes:form.notes,
+      start_date:form.start||null, end_date:form.end||null, notes:form.notes,
       phase_id:parseInt(form.phase_id)||null, sort_order:projects.length,
     };
     sbInsertRow("projects", dbProject).then(rows=>{
