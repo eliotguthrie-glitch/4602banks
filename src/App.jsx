@@ -1694,10 +1694,13 @@ function TasksGrid({tasks, setTasks, projects}) {
 
 // ── PHASES VIEW ────────────────────────────────────────────────────────────
 // ── PHASES VIEW ──────────────────────────────────────────────────────────────
-function PhasesView({phases, projects, onNavigate, onAddPhase, onAddProject}) {
+function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, onDeletePhase}) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({name:"",notes:""});
   const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({name:"",notes:""});
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const addPhase = () => {
     if(!form.name) return;
@@ -1707,6 +1710,18 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onAddProject}) {
       setForm({name:"",notes:""});
       setShowAdd(false);
     }).catch(console.error).finally(()=>setSaving(false));
+  };
+
+  const saveEdit = (id) => {
+    onUpdatePhase(id, editForm);
+    sbPatch("phases", id, {name:editForm.name, notes:editForm.notes}).catch(console.error);
+    setEditId(null);
+  };
+
+  const doDelete = (id) => {
+    onDeletePhase(id);
+    sbDel("phases", id).catch(console.error);
+    setConfirmDeleteId(null);
   };
 
   return (
@@ -1745,16 +1760,44 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onAddProject}) {
         const totalBudget=faProjects.reduce((s,p)=>s+p.budget,0);
         return(
           <div key={fa.id} style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface,marginBottom:16}}>
-            <div style={{padding:"14px 18px",borderBottom:faProjects.length>0?`1px solid ${C.divider}`:"none",display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg}}>
-              <div>
-                <p style={{fontSize:15,fontWeight:700,color:C.text}}>{fa.name}</p>
-                {fa.notes&&<p style={{fontSize:12,color:C.muted,marginTop:2}}>{fa.notes}</p>}
+            {editId===fa.id?(
+              <div style={{padding:"14px 18px",background:C.bg,borderBottom:`1px solid ${C.divider}`}}>
+                <div style={{marginBottom:8}}>
+                  <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
+                  <Input value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))}/>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
+                  <NoteField value={editForm.notes} onChange={v=>setEditForm(f=>({...f,notes:v}))} rows={2}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{display:"flex",gap:8}}>
+                    <Btn variant="primary" onClick={()=>saveEdit(fa.id)}>Save</Btn>
+                    <Btn onClick={()=>setEditId(null)}>Cancel</Btn>
+                  </div>
+                  {confirmDeleteId===fa.id
+                    ? <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:12,color:"#9E3C3C"}}>Delete phase?</span>
+                        <Btn variant="danger" onClick={()=>doDelete(fa.id)}>Yes, delete</Btn>
+                        <Btn onClick={()=>setConfirmDeleteId(null)}>Cancel</Btn>
+                      </div>
+                    : <Btn variant="danger" onClick={()=>setConfirmDeleteId(fa.id)}>Delete phase</Btn>
+                  }
+                </div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <span style={{fontSize:12,color:C.muted}}>{faProjects.length} project{faProjects.length!==1?"s":""} · {fmtM(totalBudget)} total</span>
-                <Btn onClick={()=>onNavigate("projects")} style={{fontSize:11}}>+ Add project</Btn>
+            ):(
+              <div style={{padding:"14px 18px",borderBottom:faProjects.length>0?`1px solid ${C.divider}`:"none",display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg}}>
+                <div>
+                  <p style={{fontSize:15,fontWeight:700,color:C.text}}>{fa.name}</p>
+                  {fa.notes&&<p style={{fontSize:12,color:C.muted,marginTop:2}}>{fa.notes}</p>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:12,color:C.muted}}>{faProjects.length} project{faProjects.length!==1?"s":""} · {fmtM(totalBudget)} total</span>
+                  <Btn onClick={()=>onNavigate("projects")} style={{fontSize:11}}>+ Add project</Btn>
+                  <Btn onClick={()=>{setEditId(fa.id);setEditForm({name:fa.name,notes:fa.notes||""});setConfirmDeleteId(null);}}>Edit</Btn>
+                </div>
               </div>
-            </div>
+            )}
             {faProjects.map((pr,i)=>(
               <div key={pr.id} onClick={()=>onNavigate("project",pr.id)}
                 style={{display:"flex",alignItems:"center",gap:14,padding:"12px 18px",borderBottom:i<faProjects.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
@@ -2125,7 +2168,7 @@ export default function App() {
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
         {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject}/>}
         {!showProjectPage&&<>
-          {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onAddProject={p=>setProjects(prev=>[...prev,p])}/> }
+          {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
           {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
           {view==="timeline" &&<TimelineView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
