@@ -1940,6 +1940,8 @@ export default function App() {
     setTasks(prev=>prev.filter(t=>t.phase_id!==id));
     sbDel("phases", id).catch(console.error);
   };
+
+  const addTasks = newTasks => {
     const dbTasks = newTasks.map(t=>({
       phase_id:t.phase_id, title:t.title, assignee:t.assignee||"",
       start_date:t.start||TODAY, end_date:t.end||addDays(TODAY,7),
