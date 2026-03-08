@@ -1118,7 +1118,7 @@ function EventsView({events,setEvents,projects}) {
 // ── DASHBOARD ──────────────────────────────────────────────────────────────
 function Dashboard({projects,tasks,expenses,events,onNavigate}) {
   const spent=expenses.reduce((s,e)=>s+e.amount,0);
-  const allocated=phases.reduce((s,p)=>s+p.budget,0);
+  const allocated=projects.reduce((s,p)=>s+p.budget,0);
   const done=tasks.filter(t=>t.status==="complete").length;
   const upcoming=[...tasks].filter(t=>t.status!=="complete").sort((a,b)=>toMs(a.end)-toMs(b.end)).slice(0,6);
   const upcomingEvents=[...events].filter(e=>!e.done&&toMs(e.date)>=toMs(TODAY)).sort((a,b)=>toMs(a.date)-toMs(b.date)).slice(0,4);
@@ -1289,7 +1289,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
       rows:[...tasks].sort((a,b)=>toMs(a.start)-toMs(b.start)),
       taskColor:t=>t.status==="complete"?C.faint:pc(t.project_id),
     }];
-  },[groupBy,tasks,phases]);
+  },[groupBy,tasks,projects]);
 
   const colLabel = groupBy==="phase"?"Phase / task" : groupBy==="assignee"?"Assignee / task" : "Task";
 
@@ -1441,7 +1441,7 @@ function WeeklyView({tasks,setTasks,projects,onNavigate}) {
 
 // ── BUDGET ─────────────────────────────────────────────────────────────────
 function BudgetView({projects,expenses,onNavigate}) {
-  const totalB=PROJECT.total_budget,allocated=phases.reduce((s,p)=>s+p.budget,0),totalSpent=expenses.reduce((s,e)=>s+e.amount,0);
+  const totalB=PROJECT.total_budget,allocated=projects.reduce((s,p)=>s+p.budget,0),totalSpent=expenses.reduce((s,e)=>s+e.amount,0);
   return (
     <div style={{padding:"32px 40px"}}>
       <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px",marginBottom:18}}>Budget</h2>
@@ -1520,7 +1520,7 @@ function TasksGrid({tasks, setTasks, projects}) {
   const commitAdd = (key, defaultPhaseId) => {
     if(!newTitle.trim()) { setAddingTo(null); setNewTitle(""); return; }
     const dbTask = {
-      project_id: defaultPhaseId||phases[0]?.id||1, title:newTitle.trim(),
+      project_id: defaultPhaseId||projects[0]?.id||1, title:newTitle.trim(),
       assignee:"", start_date:TODAY, end_date:addDays(TODAY,7),
       status:"todo", notes:"", sort_order:0,
     };
@@ -1533,7 +1533,7 @@ function TasksGrid({tasks, setTasks, projects}) {
   // ── Build groups ──────────────────────────────────────────────────────────
   const groups = useMemo(()=>{
     if(groupBy==="phase") {
-      return phases.map(ph=>({
+      return projects.map(ph=>({
         key: String(ph.id),
         label: ph.name,
         dot: pc(ph.id),
@@ -1548,7 +1548,7 @@ function TasksGrid({tasks, setTasks, projects}) {
         label: name,
         dot: null,
         tasks: [...tasks].filter(t=>(t.assignee||"Unassigned")===name),
-        addPhaseId: phases[0]?.id||1,
+        addPhaseId: projects[0]?.id||1,
       }));
     }
     // date — flat list sorted by end date, no add-task per group
