@@ -713,9 +713,12 @@ function AIPanel({phase, phases, tasks, onAddTasks, onAddBudgetItems, compact}) 
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems}) {
+function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeletePhase}) {
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(null);
+  const [editing,setEditing]=useState(false);
+  const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||""});
+  const [confirmDelete,setConfirmDelete]=useState(false);
   const phaseTasks=tasks.filter(t=>t.phase_id===phase.id);
   const spent=expenses.filter(e=>e.phase_id===phase.id).reduce((s,e)=>s+e.amount,0);
   const phaseQuote=quotes.find(q=>q.phase_id===phase.id);
@@ -725,11 +728,82 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
     if(t) return <TaskPage task={t} phase={phase} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask}/>;
   }
 
+  const saveEdit = () => {
+    const updated = {...phase, ...editForm, budget:parseInt(editForm.budget)||0};
+    onUpdatePhase(phase.id, ()=>updated);
+    sbPatch("phases", phase.id, {
+      name:editForm.name, status:editForm.status, budget:parseInt(editForm.budget)||0,
+      start_date:editForm.start, end_date:editForm.end, notes:editForm.notes,
+    }).catch(console.error);
+    setEditing(false);
+  };
+
+  const doDelete = () => {
+    onDeletePhase(phase.id);
+    onNavigate("dashboard");
+  };
+
   const tabs=[{id:"tasks",label:"Tasks"},{id:"quotes",label:"Quotes"},{id:"photos",label:"Photos"},{id:"notes",label:"Notes"},{id:"ai",label:"✦ AI"}];
 
   return (
     <div style={{padding:"32px 40px",maxWidth:1000}}>
       <Breadcrumb crumbs={[{label:"Overview",onClick:()=>onNavigate("dashboard")},{label:phase.name}]}/>
+
+      {/* Edit form */}
+      {editing&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:20}}>
+          <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>Edit phase</p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
+              <Input value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))}/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Status</p>
+              <select value={editForm.status} onChange={e=>setEditForm(f=>({...f,status:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
+                <option value="planning">Planning</option>
+                <option value="active">Active</option>
+                <option value="complete">Complete</option>
+                <option value="on_hold">On hold</option>
+              </select>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Start</p>
+              <input type="date" value={editForm.start} onChange={e=>setEditForm(f=>({...f,start:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>End</p>
+              <input type="date" value={editForm.end} onChange={e=>setEditForm(f=>({...f,end:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Budget ($)</p>
+              <Input value={String(editForm.budget)} onChange={v=>setEditForm(f=>({...f,budget:v}))}/>
+            </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
+            <NoteField value={editForm.notes} onChange={v=>setEditForm(f=>({...f,notes:v}))} rows={2}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",gap:8}}>
+              <Btn variant="primary" onClick={saveEdit}>Save</Btn>
+              <Btn onClick={()=>setEditing(false)}>Cancel</Btn>
+            </div>
+            {!confirmDelete
+              ? <Btn variant="danger" onClick={()=>setConfirmDelete(true)}>Delete phase</Btn>
+              : <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:12,color:"#9E3C3C"}}>Delete phase and all its tasks?</span>
+                  <Btn variant="danger" onClick={doDelete}>Yes, delete</Btn>
+                  <Btn onClick={()=>setConfirmDelete(false)}>Cancel</Btn>
+                </div>
+            }
+          </div>
+        </div>
+      )}
+
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
           <div style={{width:10,height:10,borderRadius:2,background:pc(phase.id),marginTop:6,flexShrink:0}}/>
@@ -742,10 +816,15 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
             </div>
           </div>
         </div>
-        <div style={{textAlign:"right",flexShrink:0}}>
-          <p style={{fontSize:11,color:C.muted,marginBottom:2}}>Budget</p>
-          <p style={{fontSize:18,fontWeight:600,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(phase.budget)}</p>
-          <p style={{fontSize:12,color:C.muted}}>{fmtM(spent)} spent · {fmtM(phase.budget-spent)} left</p>
+        <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <p style={{fontSize:11,color:C.muted,marginBottom:2}}>Budget</p>
+            <p style={{fontSize:18,fontWeight:600,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(phase.budget)}</p>
+            <p style={{fontSize:12,color:C.muted}}>{fmtM(spent)} spent · {fmtM(phase.budget-spent)} left</p>
+          </div>
+          <Btn onClick={()=>{setEditing(s=>!s);setConfirmDelete(false);setEditForm({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||""});}}>
+            {editing?"Cancel":"Edit"}
+          </Btn>
         </div>
       </div>
 
@@ -1691,17 +1770,38 @@ export default function App() {
   }, []);
 
   const handleLogin = (data) => {
-    setSession(data);
     AUTH_TOKEN = data.access_token;
+    localStorage.setItem("4602banks_session", JSON.stringify(data));
+    setSession(data);
     loadData();
   };
 
   const handleSignOut = () => {
     sbSignOut().catch(()=>{});
     AUTH_TOKEN = null;
+    localStorage.removeItem("4602banks_session");
     setSession(null);
     setPhases([]); setTasks([]); setExpenses([]); setEvents([]); setQuotes([]);
   };
+
+  // Restore session on mount
+  useEffect(()=>{
+    const saved = localStorage.getItem("4602banks_session");
+    if(!saved) return;
+    try {
+      const data = JSON.parse(saved);
+      const exp = data?.expires_at || 0;
+      if(Date.now()/1000 < exp) {
+        AUTH_TOKEN = data.access_token;
+        setSession(data);
+        loadData();
+      } else {
+        localStorage.removeItem("4602banks_session");
+      }
+    } catch(e) {
+      localStorage.removeItem("4602banks_session");
+    }
+  }, []);
 
   if(!session) return <LoginPage onLogin={handleLogin}/>;
 
@@ -1717,7 +1817,11 @@ export default function App() {
     setQuotes(prev=>prev.map(q=>q.id===id?fn(q):q));
   };
 
-  const addTasks = newTasks => {
+  const deletePhase = id => {
+    setPhases(prev=>prev.filter(p=>p.id!==id));
+    setTasks(prev=>prev.filter(t=>t.phase_id!==id));
+    sbDel("phases", id).catch(console.error);
+  };
     const dbTasks = newTasks.map(t=>({
       phase_id:t.phase_id, title:t.title, assignee:t.assignee||"",
       start_date:t.start||TODAY, end_date:t.end||addDays(TODAY,7),
@@ -1788,7 +1892,7 @@ export default function App() {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showPhasePage&&activePhase&&<PhasePage phase={activePhase} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdatePhase={updatePhase} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems}/>}
+        {showPhasePage&&activePhase&&<PhasePage phase={activePhase} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdatePhase={updatePhase} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeletePhase={deletePhase}/>}
         {!showPhasePage&&<>
           {view==="dashboard"&&<Dashboard phases={phases} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
           {view==="timeline" &&<TimelineView phases={phases} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
