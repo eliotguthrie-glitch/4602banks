@@ -1409,7 +1409,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
   const bw=useCallback(()=>containerRef.current?containerRef.current.getBoundingClientRect().width-LCOL:800,[]);
   const onDown=useCallback((e,id,type)=>{
     e.preventDefault();e.stopPropagation();
-    const t=tasks.find(x=>x.id===id);if(!t)return;
+    const t=tasks.find(x=>x.id===id);if(!t||!t.start||!t.end)return;
     setDrag({id,type,startX:e.clientX,origStart:t.start,origEnd:t.end,bw:bw()});
   },[tasks,bw]);
 
@@ -1419,6 +1419,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
       const dd=Math.round(((e.clientX-drag.startX)/drag.bw)*projDays);
       setTasks(prev=>prev.map(t=>{
         if(t.id!==drag.id)return t;
+        if(!drag.origStart||!drag.origEnd)return t;
         if(drag.type==="move")return{...t,start:addDays(drag.origStart,dd),end:addDays(drag.origEnd,dd)};
         const ne=addDays(drag.origEnd,dd);
         return{...t,end:ne>drag.origStart?ne:addDays(drag.origStart,1)};
@@ -1449,7 +1450,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
           return <div style={{position:"absolute",left:`${bL}%`,width:`${bW}%`,height:6,background:pc(ph.id),borderRadius:3,opacity:0.25,zIndex:1}}/>;
         },
         onHeaderClick: ()=>onNavigate("project",ph.id),
-        rows: tasks.filter(t=>t.project_id===ph.id),
+        rows: tasks.filter(t=>t.project_id===ph.id && t.start && t.end),
         taskColor: t=>t.status==="complete"?C.faint:pc(ph.id),
       }));
     }
@@ -1461,7 +1462,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
         color: null,
         headerExtra: ()=>null,
         onHeaderClick: null,
-        rows: tasks.filter(t=>t.assignee===a).sort((x,y)=>toMs(x.start)-toMs(y.start)),
+        rows: tasks.filter(t=>t.assignee===a && t.start && t.end).sort((x,y)=>toMs(x.start)-toMs(y.start)),
         taskColor: t=>t.status==="complete"?C.faint:pc(t.project_id),
       }));
     }
@@ -1472,7 +1473,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
       color:null,
       headerExtra:()=>null,
       onHeaderClick:null,
-      rows:[...tasks].sort((a,b)=>toMs(a.start)-toMs(b.start)),
+      rows:[...tasks].filter(t=>t.start&&t.end).sort((a,b)=>toMs(a.start)-toMs(b.start)),
       taskColor:t=>t.status==="complete"?C.faint:pc(t.project_id),
     }];
   },[groupBy,tasks,projects]);
@@ -1585,7 +1586,7 @@ function WeeklyView({tasks,setTasks,projects,onNavigate}) {
   const[dragId,setDragId]=useState(null);const[overWeek,setOverWeek]=useState(null);
   const grouped=useMemo(()=>{const sorted=[...tasks].sort((a,b)=>toMs(a.end)-toMs(b.end));const weeks={};sorted.forEach(t=>{const d=new Date(t.end+"T12:00:00");const mon=new Date(d);mon.setDate(d.getDate()-((d.getDay()+6)%7));const key=mon.toISOString().split("T")[0];if(!weeks[key])weeks[key]=[];weeks[key].push(t);});return Object.entries(weeks).sort(([a],[b])=>a.localeCompare(b));},[tasks]);
   const onDragStart=(e,id)=>{setDragId(id);const img=new Image();img.src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";e.dataTransfer.setDragImage(img,0,0);};
-  const onDrop=ws=>{if(!dragId)return;const t=tasks.find(x=>x.id===dragId);if(!t)return;const dur=daysBetween(t.start,t.end);const ne=addDays(ws,5);setTasks(prev=>prev.map(x=>x.id===dragId?{...x,start:addDays(ne,-dur),end:ne}:x));setDragId(null);setOverWeek(null);};
+  const onDrop=ws=>{if(!dragId)return;const t=tasks.find(x=>x.id===dragId);if(!t||!t.start||!t.end)return;const dur=daysBetween(t.start,t.end);const ne=addDays(ws,5);setTasks(prev=>prev.map(x=>x.id===dragId?{...x,start:addDays(ne,-dur),end:ne}:x));setDragId(null);setOverWeek(null);};
   return (
     <div style={{padding:"32px 40px",userSelect:dragId?"none":"auto"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:14,marginBottom:22}}><h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Weekly</h2><span style={{fontSize:12,color:C.muted}}>Drag to reschedule · click to open</span></div>
