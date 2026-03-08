@@ -31,7 +31,7 @@ const sbDel     = (table, id) => sbFetch("/rest/v1/"+table+"?id=eq."+id, {method
 // DB → app field mappers
 const mapProject   = p => ({...p, start:p.start_date, end:p.end_date, photos:[]});
 const mapTask    = t => ({...t, start:t.start_date, end:t.end_date, photos:[]});
-const mapEvent   = e => ({...e, date:e.event_date, type:e.event_type});
+const mapEvent   = e => ({...e, date:e.event_date, type:e.event_type, time:e.event_time||""});
 const mapExpense = e => ({...e, date:e.expense_date});
 const mapQuote   = q => ({
   id:q.id, project_id:q.project_id, awarded_to:q.awarded_to, notes:q.notes,
@@ -146,7 +146,7 @@ const uid         = ()   => Math.random().toString(36).slice(2,9);
 
 // ── Shared UI ──────────────────────────────────────────────────────────────
 function Chip({status}) {
-  const map={complete:{bg:"#EEFBF4",color:"#1D7D4A",label:"Done"},in_progress:{bg:"#EBF3FD",color:"#1A6BBC",label:"In progress"},todo:{bg:"#F1F1EF",color:"#73726E",label:"To do"},active:{bg:"#EBF3FD",color:"#1A6BBC",label:"Active"},planning:{bg:"#F1F1EF",color:"#73726E",label:"Planning"}};
+  const map={complete:{bg:"#EEFBF4",color:"#1D7D4A",label:"Done"},todo:{bg:"#F1F1EF",color:"#73726E",label:"To do"},active:{bg:"#EBF3FD",color:"#1A6BBC",label:"Active"},planning:{bg:"#F1F1EF",color:"#73726E",label:"Planning"},on_hold:{bg:"#FEF9EC",color:"#A0700A",label:"On hold"}};
   const {bg,color,label}=map[status]||map.todo;
   return <span style={{background:bg,color,fontSize:11,fontWeight:500,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap"}}>{label}</span>;
 }
@@ -397,7 +397,7 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent}) {
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
             <Chip status={task.status}/>
             <span style={{fontSize:12,color:C.muted}}>{fmtFull(task.start)} → {fmtFull(task.end)}</span>
-            <span style={{fontSize:12,color:C.muted}}>· {daysBetween(task.start,task.end)} days</span>
+            <span style={{fontSize:12,color:C.muted}}>{task.end?"· "+daysBetween(task.start,task.end)+" days":""}</span>
           </div>
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
@@ -405,20 +405,25 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent}) {
             ? <span style={{fontSize:12,color:C.green,fontWeight:500}}>✓ Added to calendar</span>
             : <button onClick={convertToEvent} style={{padding:"5px 10px",fontSize:12,fontWeight:500,borderRadius:5,cursor:"pointer",border:`1px solid ${C.border}`,background:C.surface,color:C.muted,marginRight:4}}>Add to calendar</button>
           }
-          {["todo","in_progress","complete"].map(s=>(
-            <button key={s} onClick={()=>onUpdateTask(task.id,t=>({...t,status:s}))} style={{padding:"5px 10px",fontSize:12,fontWeight:500,borderRadius:5,cursor:"pointer",border:`1px solid ${task.status===s?C.accent:C.border}`,background:task.status===s?C.accentBg:C.surface,color:task.status===s?C.accent:C.muted}}>
-              {{todo:"To do",in_progress:"In progress",complete:"Done"}[s]}
+          {[{s:"todo",label:"To do"},{s:"complete",label:"Done"}].map(({s,label})=>(
+            <button key={s} onClick={()=>{onUpdateTask(task.id,t=>({...t,status:s}));sbPatch("tasks",task.id,{status:s}).catch(console.error);}} style={{padding:"5px 14px",fontSize:12,fontWeight:500,borderRadius:5,cursor:"pointer",border:`1px solid ${task.status===s?C.accent:C.border}`,background:task.status===s?C.accentBg:C.surface,color:task.status===s?C.accent:C.muted}}>
+              {label}
             </button>
           ))}
         </div>
       </div>
 
       <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,marginBottom:16}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr"}}>
           {[
             {label:"Project",value:<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:7,height:7,borderRadius:2,background:pc(phase.id)}}/><span style={{fontSize:13,color:C.text}}>{phase.name}</span></div>},
             {label:"Assignee",value:<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name={task.assignee}/><span style={{fontSize:13,color:C.text}}>{task.assignee||"—"}</span></div>},
-            {label:"Duration",value:<span style={{fontSize:13,color:C.text}}>{daysBetween(task.start,task.end)} days</span>},
+            {label:"Duration",value:<span style={{fontSize:13,color:C.text}}>{task.end?daysBetween(task.start,task.end)+" days":"—"}</span>},
+            {label:"Cost ($)",value:(
+              <input type="number" min="0" defaultValue={task.price||""} placeholder="0"
+                onBlur={e=>{const v=parseFloat(e.target.value)||0;onUpdateTask(task.id,t=>({...t,price:v}));sbPatch("tasks",task.id,{price:v}).catch(console.error);}}
+                style={{fontSize:13,color:C.text,border:"none",background:"transparent",fontFamily:"inherit",outline:"none",padding:0,width:"100%"}}/>
+            )},
           ].map(({label,value},i)=>(
             <div key={label} style={{padding:"14px 18px",borderRight:`1px solid ${C.divider}`}}>
               <p style={{fontSize:11,color:C.muted,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{label}</p>
@@ -435,9 +440,9 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent}) {
           </div>
           <div style={{padding:"14px 18px"}}>
             <p style={{fontSize:11,color:C.muted,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>End</p>
-            <input type="date" value={task.end} onChange={e=>{
-              const v=e.target.value;
-              onUpdateTask(task.id,t=>({...t,end:v}));
+            <input type="date" value={task.end||""} onChange={e=>{
+              const v=e.target.value||null;
+              onUpdateTask(task.id,t=>({...t,end:v||""}));
               sbPatch("tasks",task.id,{end_date:v}).catch(console.error);
             }} style={{fontSize:13,color:C.text,border:"none",background:"transparent",fontFamily:"inherit",cursor:"pointer",outline:"none",padding:0,width:"100%"}}/>
           </div>
@@ -891,7 +896,7 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
                 </div>
                 <Avatar name={t.assignee}/>
                 <Chip status={t.status}/>
-                {(t.photos.length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{t.photos.length>0?"📷":""}{t.notes?"📝":""}</span>}
+                {t.price>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(t.price)}</span>}{(t.photos.length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{t.photos.length>0?"📷":""}{t.notes?"📝":""}</span>}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
             ))}
@@ -995,7 +1000,7 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
 // ── EVENTS VIEW ────────────────────────────────────────────────────────────
 function EventsView({events,setEvents,projects}) {
   const [showAdd,setShowAdd]=useState(false);
-  const [form,setForm]=useState({date:"",title:"",type:"inspection",project_id:"",notes:""});
+  const [form,setForm]=useState({date:"",time:"",title:"",type:"inspection",project_id:"",notes:""});
 
   const grouped=useMemo(()=>{
     const sorted=[...events].sort((a,b)=>toMs(a.date)-toMs(b.date));
@@ -1012,11 +1017,11 @@ function EventsView({events,setEvents,projects}) {
   const addEvent=()=>{
     if(!form.date||!form.title) return;
     const dbEvent = {
-      event_date:form.date, title:form.title, event_type:form.type,
+      event_date:form.date, event_time:form.time||null, title:form.title, event_type:form.type,
       project_id:form.project_id?parseInt(form.project_id):null,
       notes:form.notes, done:false,
     };
-    setForm({date:"",title:"",type:"inspection",project_id:"",notes:""});
+    setForm({date:"",time:"",title:"",type:"inspection",project_id:"",notes:""});
     setShowAdd(false);
     sbInsertRow("events", dbEvent).then(rows=>{
       if(rows?.[0]) setEvents(prev=>[...prev, mapEvent(rows[0])]);
@@ -1045,10 +1050,15 @@ function EventsView({events,setEvents,projects}) {
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New event</p>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
             <div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Date</p>
               <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Time (optional)</p>
+              <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))}
                 style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
             </div>
             <div>
@@ -1099,7 +1109,7 @@ function EventsView({events,setEvents,projects}) {
                     <span style={{fontSize:11,fontWeight:600,color:col,textTransform:"uppercase",letterSpacing:"0.04em"}}>{eventLabel(ev.type)}</span>
                   </div>
                   <p style={{fontSize:13,fontWeight:500,color:C.text,marginBottom:3,lineHeight:1.3}}>{ev.title}</p>
-                  <p style={{fontSize:12,fontVariantNumeric:"tabular-nums",color:C.muted}}>{fmtFull(ev.date)}</p>
+                  <p style={{fontSize:12,fontVariantNumeric:"tabular-nums",color:C.muted}}>{fmtFull(ev.date)}{ev.time?" · "+ev.time:""}</p>
                   {ph&&<p style={{fontSize:11,color:C.faint,marginTop:3}}>{ph.name}</p>}
                 </div>
               );
@@ -1133,7 +1143,7 @@ function EventsView({events,setEvents,projects}) {
                       {ph&&<><span style={{color:C.faint,fontSize:11}}>·</span><span style={{fontSize:11,color:C.muted}}>{ph.name}</span></>}
                     </div>
                     <p style={{fontSize:13,fontWeight:500,color:ev.done?C.muted:C.text,textDecoration:ev.done?"line-through":"none"}}>{ev.title}</p>
-                    {ev.notes&&<p style={{fontSize:12,color:C.muted,marginTop:3,lineHeight:1.4}}>{ev.notes}</p>}
+                    {ev.time&&<p style={{fontSize:12,color:C.muted,marginTop:2}}>{ev.time}</p>}{ev.notes&&<p style={{fontSize:12,color:C.muted,marginTop:3,lineHeight:1.4}}>{ev.notes}</p>}
                   </div>
                   {/* Actions */}
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
@@ -1475,8 +1485,8 @@ function WeeklyView({tasks,setTasks,projects,onNavigate}) {
 }
 
 // ── BUDGET ─────────────────────────────────────────────────────────────────
-function BudgetView({projects,expenses,onNavigate}) {
-  const allocated=projects.reduce((s,p)=>s+p.budget,0);const totalB=allocated,totalSpent=expenses.reduce((s,e)=>s+e.amount,0);
+function BudgetView({projects,expenses,tasks,onNavigate}) {
+  const allocated=projects.reduce((s,p)=>s+p.budget,0);const taskCosts=tasks?tasks.reduce((s,t)=>s+(t.price||0),0):0;const totalB=allocated,totalSpent=expenses.reduce((s,e)=>s+e.amount,0);
   return (
     <div style={{padding:"32px 40px"}}>
       <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px",marginBottom:18}}>Budget</h2>
@@ -1557,7 +1567,7 @@ function TasksGrid({tasks, setTasks, projects}) {
     const dbTask = {
       project_id: defaultPhaseId||projects[0]?.id||1, title:newTitle.trim(),
       assignee:"", start_date:TODAY, end_date:addDays(TODAY,7),
-      status:"todo", notes:"", sort_order:0,
+      status:"todo", notes:"", price:0, sort_order:0,
     };
     setNewTitle("");
     if(!continueAdding) setAddingTo(null);
@@ -2235,7 +2245,7 @@ export default function App() {
           {view==="timeline" &&<TimelineView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects}/>}
-          {view==="budget"   &&<BudgetView projects={projects} expenses={expenses} onNavigate={navigate}/>}
+          {view==="budget"   &&<BudgetView projects={projects} expenses={expenses} tasks={tasks} onNavigate={navigate}/>}
           {view==="events"   &&<EventsView events={events} setEvents={setEvents} projects={projects}/>}
           {view==="settings" &&(
             <div style={{padding:"32px 40px",maxWidth:500}}>
