@@ -488,9 +488,9 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
   const [loading, setLoading]     = useState(false);
   const [result, setResult]       = useState(null);
   const [error, setError]         = useState("");
-  const [selPhaseId, setSelPhaseId] = useState(phase ? phase.id : (phases[0] ? phases[0].id : null));
+  const [selPhaseId, setSelPhaseId] = useState(phase ? phase.id : (projects[0] ? projects[0].id : null));
 
-  const activePhase = phase || phases.find(p => p.id === Number(selPhaseId));
+  const activePhase = phase || projects.find(p => p.id === Number(selPhaseId));
   const projectTasks  = tasks.filter(t => activePhase && t.project_id === activePhase.id);
 
   const reset = () => { setResult(null); setError(""); setInput(""); };
@@ -1055,7 +1055,7 @@ function EventsView({events,setEvents,projects}) {
           <p style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Coming up</p>
           <div style={{display:"flex",gap:10}}>
             {upcoming.map(ev=>{
-              const ph=phases.find(p=>p.id===ev.project_id);
+              const ph=projects.find(p=>p.id===ev.project_id);
               const col=eventColor(ev.type);
               return (
                 <div key={ev.id} style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",background:C.surface}}>
@@ -1079,7 +1079,7 @@ function EventsView({events,setEvents,projects}) {
           <p style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>{month}</p>
           <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
             {evs.map((ev,i)=>{
-              const ph=phases.find(p=>p.id===ev.project_id);
+              const ph=projects.find(p=>p.id===ev.project_id);
               const col=eventColor(ev.type);
               const isPast=toMs(ev.date)<toMs(TODAY)&&!ev.done;
               return (
@@ -1141,7 +1141,7 @@ function Dashboard({projects,tasks,expenses,events,onNavigate}) {
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
           <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Upcoming tasks</p></div>
           {upcoming.map((t,i)=>{
-            const ph=phases.find(p=>p.id===t.project_id);
+            const ph=projects.find(p=>p.id===t.project_id);
             return (
               <div key={t.id} onClick={()=>onNavigate("project",t.project_id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:i<upcoming.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
@@ -1162,7 +1162,7 @@ function Dashboard({projects,tasks,expenses,events,onNavigate}) {
           {phases.map((ph,i)=>{
             const s=expenses.filter(e=>e.project_id===ph.id).reduce((a,e)=>a+e.amount,0);
             return (
-              <div key={ph.id} onClick={()=>onNavigate("project",ph.id)} style={{padding:"9px 16px",borderBottom:i<phases.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+              <div key={ph.id} onClick={()=>onNavigate("project",ph.id)} style={{padding:"9px 16px",borderBottom:i<projects.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
               >
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
@@ -1254,7 +1254,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
   // Build groups based on groupBy mode
   const groups = useMemo(()=>{
     if(groupBy==="phase"){
-      return phases.map(ph=>({
+      return projects.map(ph=>({
         key: String(ph.id),
         label: ph.name,
         color: pc(ph.id),
@@ -1412,7 +1412,7 @@ function WeeklyView({tasks,setTasks,projects,onNavigate}) {
               <div style={{flex:1}}/><span style={{fontSize:11,color:C.muted}}>{wt.length} task{wt.length!==1?"s":""}</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8,paddingLeft:10}}>
-              {wt.map(t=>{const ph=phases.find(p=>p.id===t.project_id);const done=t.status==="complete";const isMe=dragId===t.id;
+              {wt.map(t=>{const ph=projects.find(p=>p.id===t.project_id);const done=t.status==="complete";const isMe=dragId===t.id;
                 return (
                   <div key={t.id} draggable onDragStart={e=>onDragStart(e,t.id)} onDragEnd={()=>{setDragId(null);setOverWeek(null);}} onClick={()=>onNavigate("project",t.project_id,t.id)}
                     style={{background:C.surface,border:`1px solid ${isMe?C.accent:C.border}`,borderRadius:6,padding:"10px 12px",display:"flex",gap:10,alignItems:"flex-start",cursor:"grab",opacity:isMe?0.35:1,transition:"opacity 0.15s,border-color 0.15s"}}
@@ -1571,7 +1571,7 @@ function TasksGrid({tasks, setTasks, projects}) {
   const TaskRow = ({task, showMeta}) => {
     const done = task.status==="complete";
     const isEditing = editingId===task.id;
-    const ph = phases.find(p=>p.id===task.project_id);
+    const ph = projects.find(p=>p.id===task.project_id);
     return (
       <div
         onMouseEnter={()=>setHovId(task.id)}
