@@ -762,14 +762,14 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
+function ProjectPage({project,tasks,expenses,quotes,phases,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
   const phase = project; // alias for minimal churn
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(null);
   const [editing,setEditing]=useState(false);
   const [addingTask,setAddingTask]=useState(false);
   const projectTaskRef=useRef(null);
-  const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual"});
+  const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual",phase_id:phase.phase_id||""});
   const [confirmDelete,setConfirmDelete]=useState(false);
   useEffect(()=>{ if(addingTask && projectTaskRef.current) projectTaskRef.current.focus(); },[addingTask]);
   const projectTasks=tasks.filter(t=>t.project_id===phase.id);
@@ -792,12 +792,12 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
   const saveEdit = () => {
     const resolvedStart = editForm.datesMode==="tasks" ? (taskDerivedDates.start||editForm.start) : editForm.start;
     const resolvedEnd   = editForm.datesMode==="tasks" ? (taskDerivedDates.end||editForm.end)     : editForm.end;
-    const updated = {...phase, ...editForm, start:resolvedStart, end:resolvedEnd, budget:parseInt(editForm.budget)||0};
+    const updated = {...phase, ...editForm, start:resolvedStart, end:resolvedEnd, budget:parseInt(editForm.budget)||0, phase_id:parseInt(editForm.phase_id)||null};
     onUpdateProject(phase.id, ()=>updated);
     sbPatch("projects", phase.id, {
       name:editForm.name, status:editForm.status, budget:parseInt(editForm.budget)||0,
       start_date:resolvedStart, end_date:resolvedEnd, notes:editForm.notes,
-      dates_mode:editForm.datesMode,
+      dates_mode:editForm.datesMode, phase_id:parseInt(editForm.phase_id)||null,
     }).catch(console.error);
     setEditing(false);
   };
@@ -841,6 +841,14 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
                 <option value="active">Active</option>
                 <option value="complete">Complete</option>
                 <option value="on_hold">On hold</option>
+              </select>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Phase</p>
+              <select value={editForm.phase_id||""} onChange={e=>setEditForm(f=>({...f,phase_id:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
+                <option value="">— No phase —</option>
+                {(phases||[]).map(fa=><option key={fa.id} value={fa.id}>{fa.name}</option>)}
               </select>
             </div>
             <div style={{gridColumn:"1/-1"}}>
@@ -918,7 +926,7 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
             <p style={{fontSize:18,fontWeight:600,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(phase.budget)}</p>
             <p style={{fontSize:12,color:C.muted}}>{fmtM(spent)} spent · {fmtM(phase.budget-spent)} left</p>
           </div>
-          <Btn onClick={()=>{setEditing(s=>!s);setConfirmDelete(false);setEditForm({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual"});}}>
+          <Btn onClick={()=>{setEditing(s=>!s);setConfirmDelete(false);setEditForm({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual",phase_id:phase.phase_id||""});}}>
             {editing?"Cancel":"Edit"}
           </Btn>
         </div>
@@ -2400,7 +2408,7 @@ export default function App() {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
+        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
