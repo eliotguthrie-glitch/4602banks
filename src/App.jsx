@@ -397,7 +397,7 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent,team}) {
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
             <Chip status={task.status}/>
             <span style={{fontSize:12,color:C.muted}}>{fmtFull(task.start)} → {fmtFull(task.end)}</span>
-            <span style={{fontSize:12,color:C.muted}}>{task.end?"· "+daysBetween(task.start,task.end)+" days":""}</span>
+            <span style={{fontSize:12,color:C.muted}}>{task.start&&task.end?"· "+daysBetween(task.start,task.end)+" days":""}</span>
           </div>
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
@@ -933,7 +933,7 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
                 <CheckBox done={t.status==="complete"} onClick={e=>{e.stopPropagation();onUpdateTask(t.id,x=>({...x,status:x.status==="complete"?"todo":"complete"}));}}/>
                 <div style={{flex:1,minWidth:0}} onClick={()=>setActiveTaskId(t.id)}>
                   <p style={{fontSize:13,color:t.status==="complete"?C.muted:C.text,textDecoration:t.status==="complete"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
-                  <p style={{fontSize:11,color:C.muted,marginTop:1}}>{fmtD(t.start)} → {fmtD(t.end)}</p>
+                  <p style={{fontSize:11,color:C.muted,marginTop:1}}>{t.start?fmtD(t.start)+" → "+(t.end?fmtD(t.end):"…"):"No date"}</p>
                 </div>
                 <Avatar name={t.assignee}/>
                 <Chip status={t.status}/>
@@ -1617,7 +1617,7 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
     if(!title) { setAddingTo(null); return; }
     const dbTask = {
       project_id: defaultPhaseId||projects[0]?.id||1, title,
-      assignee:"", start_date:TODAY,
+      assignee:"", start_date:null, end_date:null,
       status:"todo", notes:"", sort_order:0,
     };
     if(newRef.current) newRef.current.value = "";
@@ -1653,10 +1653,11 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
     const sorted = [...tasks].sort((a,b)=>toMs(a.end)-toMs(b.end));
     const now = toMs(TODAY);
     const buckets = [
-      {key:"overdue",  label:"Overdue",    dot:"#C0392B", tasks:sorted.filter(t=>toMs(t.end)<now && t.status!=="complete")},
-      {key:"week",     label:"This week",  dot:C.accent,  tasks:sorted.filter(t=>{ const ms=toMs(t.end); return ms>=now && ms<now+7*86400000 && t.status!=="complete"; })},
-      {key:"month",    label:"This month", dot:C.muted,   tasks:sorted.filter(t=>{ const ms=toMs(t.end); return ms>=now+7*86400000 && ms<now+30*86400000 && t.status!=="complete"; })},
-      {key:"later",    label:"Later",      dot:C.faint,   tasks:sorted.filter(t=>toMs(t.end)>=now+30*86400000 && t.status!=="complete")},
+      {key:"overdue",  label:"Overdue",    dot:"#C0392B", tasks:sorted.filter(t=>t.end&&toMs(t.end)<now && t.status!=="complete")},
+      {key:"week",     label:"This week",  dot:C.accent,  tasks:sorted.filter(t=>{ if(!t.end) return false; const ms=toMs(t.end); return ms>=now && ms<now+7*86400000 && t.status!=="complete"; })},
+      {key:"month",    label:"This month", dot:C.muted,   tasks:sorted.filter(t=>{ if(!t.end) return false; const ms=toMs(t.end); return ms>=now+7*86400000 && ms<now+30*86400000 && t.status!=="complete"; })},
+      {key:"later",    label:"Later",      dot:C.faint,   tasks:sorted.filter(t=>t.end&&toMs(t.end)>=now+30*86400000 && t.status!=="complete")},
+      {key:"nodate",   label:"No date",    dot:C.faint,   tasks:sorted.filter(t=>!t.start&&!t.end&&t.status!=="complete")},
       {key:"done",     label:"Done",       dot:C.green,   tasks:sorted.filter(t=>t.status==="complete")},
     ].filter(g=>g.tasks.length>0);
     return buckets.map(b=>({...b, addPhaseId:null}));
@@ -1735,15 +1736,18 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
           {/* Inline start date */}
           <input type="date" value={task.start||""}
             onChange={e=>saveField("start",e.target.value)}
-            style={{fontSize:11,color:C.faint,border:"none",background:"transparent",fontFamily:"inherit",
-              cursor:"pointer",outline:"none",padding:0,width:86,fontVariantNumeric:"tabular-nums"}}/>
+            title="Start date"
+            style={{fontSize:11,color:task.start?C.faint:C.faint,border:"none",background:"transparent",fontFamily:"inherit",
+              cursor:"pointer",outline:"none",padding:0,width:task.start?86:70,fontVariantNumeric:"tabular-nums",
+              color:task.start?C.faint:"#D0CFC9"}}/>
 
           {/* Inline end date */}
           <input type="date" value={task.end||""}
             onChange={e=>saveField("end",e.target.value)}
-            placeholder="No end"
-            style={{fontSize:11,color:C.faint,border:"none",background:"transparent",fontFamily:"inherit",
-              cursor:"pointer",outline:"none",padding:0,width:86,fontVariantNumeric:"tabular-nums"}}/>
+            title="End date"
+            style={{fontSize:11,border:"none",background:"transparent",fontFamily:"inherit",
+              cursor:"pointer",outline:"none",padding:0,width:task.end?86:70,fontVariantNumeric:"tabular-nums",
+              color:task.end?C.faint:"#D0CFC9"}}/>
         </div>
 
         {/* Click-through arrow */}
