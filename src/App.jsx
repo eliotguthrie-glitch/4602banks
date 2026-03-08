@@ -1613,17 +1613,16 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
   const startAdd  = key => { setAddingTo(key); setNewTitle(""); };
 
   const commitAdd = (key, defaultPhaseId, continueAdding=false) => {
-    const title = (newRef.current?.value || newTitle).trim();
-    if(!title) { setAddingTo(null); setNewTitle(""); return; }
+    const title = (newRef.current?.value||"").trim();
+    if(!title) { setAddingTo(null); return; }
     const dbTask = {
       project_id: defaultPhaseId||projects[0]?.id||1, title,
       assignee:"", start_date:TODAY, end_date:addDays(TODAY,7),
       status:"todo", notes:"", price:0, sort_order:0,
     };
     if(newRef.current) newRef.current.value = "";
-    setNewTitle("");
     if(!continueAdding) { setAddingTo(null); }
-    else { setTimeout(()=>newRef.current?.focus(), 0); }
+    else { setTimeout(()=>{ if(newRef.current) newRef.current.focus(); }, 0); }
     sbInsertRow("tasks", dbTask).then(rows=>{
       if(rows?.[0]) setTasks(prev=>[...prev, mapTask(rows[0])]);
     }).catch(console.error);
@@ -1808,9 +1807,9 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
                 {group.addPhaseId && (addingTo===group.key ? (
                   <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px"}}>
                     <div style={{width:15,height:15,borderRadius:3,flexShrink:0,border:"1.5px solid "+C.faint}}/>
-                    <input ref={newRef} value={newTitle} onChange={e=>setNewTitle(e.target.value)}
-                      onBlur={()=>{ const v=(newRef.current?.value||"").trim(); if(v) commitAdd(group.key,group.addPhaseId); else { setAddingTo(null); setNewTitle(""); }}}
-                      onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitAdd(group.key,group.addPhaseId,true);} if(e.key==="Escape"){setAddingTo(null);setNewTitle("");}}}                      
+                    <input ref={newRef} defaultValue=""
+                      onBlur={()=>{ const v=(newRef.current?.value||"").trim(); if(v) commitAdd(group.key,group.addPhaseId); else setAddingTo(null); }}
+                      onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitAdd(group.key,group.addPhaseId,true);} if(e.key==="Escape") setAddingTo(null);}}
                       placeholder="Task name"
                       style={{flex:1,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",fontSize:13,color:C.text,padding:0}}/>
                   </div>
