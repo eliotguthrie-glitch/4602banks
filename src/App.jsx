@@ -2404,7 +2404,7 @@ export default function App() {
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
-          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={addProject}/>}
+          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
           {view==="timeline" &&<TimelineView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} onNavigate={navigate} team={team}/>}
