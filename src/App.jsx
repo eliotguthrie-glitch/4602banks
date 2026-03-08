@@ -372,7 +372,7 @@ function QuoteComparison({quote,onUpdate,phaseName}) {
 }
 
 // ── TASK DETAIL ────────────────────────────────────────────────────────────
-function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent,team}) {
+function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onAddEvent,team}) {
   const [addedToCalendar, setAddedToCalendar] = useState(false);
   const convertToEvent = () => {
     const ev = {
@@ -457,6 +457,51 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent,team}) {
           </div>
         </div>
       </div>
+
+      {/* Subtasks */}
+      {(()=>{
+        const subtasks=(tasks||[]).filter(t=>t.parent_task_id===task.id);
+        const [addingSub,setAddingSub]=React.useState(false);
+        const subRef=React.useRef(null);
+        React.useEffect(()=>{if(addingSub&&subRef.current)subRef.current.focus();},[addingSub]);
+        const commitSub=()=>{
+          const title=(subRef.current?.value||"").trim();
+          if(!title){setAddingSub(false);return;}
+          const dbTask={project_id:task.project_id,title,parent_task_id:task.id,assignee:"",start_date:null,end_date:null,status:"todo",notes:"",sort_order:0};
+          if(subRef.current)subRef.current.value="";
+          setAddingSub(false);
+          sbInsertRow("tasks",dbTask).then(rows=>{if(rows?.[0])onAddTask(mapTask(rows[0]));}).catch(console.error);
+        };
+        return (
+          <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,marginBottom:16}}>
+            <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <p style={{fontSize:13,fontWeight:600,color:C.text}}>Subtasks</p>
+              <button onClick={()=>setAddingSub(true)} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>+ Add</button>
+            </div>
+            {subtasks.map((st,i)=>(
+              <div key={st.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:(i<subtasks.length-1||addingSub)?`1px solid ${C.divider}`:"none"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div onClick={()=>{const ns=st.status==="complete"?"todo":"complete";onUpdateTask(st.id,t=>({...t,status:ns}));sbPatch("tasks",st.id,{status:ns}).catch(console.error);}}
+                  style={{width:13,height:13,borderRadius:2,flexShrink:0,cursor:"pointer",border:"1.5px solid "+(st.status==="complete"?C.green:C.faint),background:st.status==="complete"?C.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {st.status==="complete"&&<svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <span style={{fontSize:13,flex:1,color:st.status==="complete"?C.muted:C.text,textDecoration:st.status==="complete"?"line-through":"none"}}>{st.title}</span>
+                {st.assignee&&<span style={{fontSize:11,color:C.muted}}>{st.assignee}</span>}
+              </div>
+            ))}
+            {addingSub&&(
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px"}}>
+                <div style={{width:13,height:13,borderRadius:2,flexShrink:0,border:"1.5px solid "+C.faint}}/>
+                <input ref={subRef} defaultValue="" placeholder="Subtask name"
+                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitSub();} if(e.key==="Escape")setAddingSub(false);}}
+                  onBlur={()=>{const v=(subRef.current?.value||"").trim();if(v)commitSub();else setAddingSub(false);}}
+                  style={{flex:1,fontSize:13,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",color:C.text,padding:0}}/>
+              </div>
+            )}
+            {subtasks.length===0&&!addingSub&&<p style={{padding:"12px 16px",fontSize:12,color:C.faint}}>No subtasks yet.</p>}
+          </div>
+        );
+      })()}
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
@@ -786,7 +831,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,onNavigate,onUpdatePr
 
   if(activeTaskId){
     const t=tasks.find(x=>x.id===activeTaskId);
-    if(t) return <TaskPage task={t} phase={phase} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddEvent={onAddEvent} team={team}/>;
+    if(t) return <TaskPage task={t} phase={phase} tasks={tasks} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddTask={t=>onAddTasks([t])} onAddEvent={onAddEvent} team={team}/>;
   }
 
   const saveEdit = () => {
@@ -951,14 +996,17 @@ function ProjectPage({project,tasks,expenses,quotes,phases,onNavigate,onUpdatePr
                 <button onClick={()=>setAddingTask(true)} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>+ Add task</button>
               </div>
             </div>
-            {projectTasks.map((t,i)=>(
+            {projectTasks.filter(t=>!t.parent_task_id).map((t,i)=>(
               <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<projectTasks.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
               >
                 <CheckBox done={t.status==="complete"} onClick={e=>{e.stopPropagation();onUpdateTask(t.id,x=>({...x,status:x.status==="complete"?"todo":"complete"}));}}/>
                 <div style={{flex:1,minWidth:0}} onClick={()=>setActiveTaskId(t.id)}>
                   <p style={{fontSize:13,color:t.status==="complete"?C.muted:C.text,textDecoration:t.status==="complete"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
-                  <p style={{fontSize:11,color:C.muted,marginTop:1}}>{t.start?fmtD(t.start)+" → "+(t.end?fmtD(t.end):"…"):"No date"}</p>
+                  <p style={{fontSize:11,color:C.muted,marginTop:1}}>
+                    {t.start?fmtD(t.start)+" → "+(t.end?fmtD(t.end):"…"):"No date"}
+                    {(()=>{const sc=tasks.filter(x=>x.parent_task_id===t.id);return sc.length>0?<span style={{marginLeft:6,color:C.faint}}>{sc.filter(x=>x.status==="complete").length}/{sc.length} subtasks</span>:null;})()}
+                  </p>
                 </div>
                 <Avatar name={t.assignee}/>
                 <Chip status={t.status}/>
