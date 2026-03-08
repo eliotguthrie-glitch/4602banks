@@ -1527,7 +1527,7 @@ function BudgetView({projects,expenses,tasks,onNavigate}) {
 }
 
 // ── TASKS GRID ─────────────────────────────────────────────────────────────
-function TasksGrid({tasks, setTasks, projects}) {
+function TasksGrid({tasks, setTasks, projects, onNavigate}) {
   const [groupBy,    setGroupBy]    = useState("phase"); // "phase" | "assignee" | "date"
   const [editingId,  setEditingId]  = useState(null);
   const [editTitle,  setEditTitle]  = useState("");
@@ -1618,12 +1618,21 @@ function TasksGrid({tasks, setTasks, projects}) {
     const done = task.status==="complete";
     const isEditing = editingId===task.id;
     const ph = projects.find(p=>p.id===task.project_id);
+    const isHov = hovId===task.id;
+
+    const saveField = (field, value) => {
+      setTasks(prev=>prev.map(t=>t.id===task.id?{...t,[field]:value}:t));
+      const dbField = field==="start"?"start_date":field==="end"?"end_date":field;
+      sbPatch("tasks", task.id, {[dbField]:value||null}).catch(console.error);
+    };
+
     return (
       <div
         onMouseEnter={()=>setHovId(task.id)}
         onMouseLeave={()=>setHovId(null)}
-        style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",borderRadius:6,background:hovId===task.id?C.hover:"transparent"}}
+        style={{display:"flex",alignItems:"center",gap:8,padding:"5px 10px",borderRadius:6,background:isHov?C.hover:"transparent"}}
       >
+        {/* Checkbox */}
         <div onClick={()=>toggleDone(task.id)} style={{
           width:15,height:15,borderRadius:3,flexShrink:0,cursor:"pointer",
           border:"1.5px solid "+(done?C.green:C.faint),background:done?C.green:"transparent",
@@ -1632,6 +1641,7 @@ function TasksGrid({tasks, setTasks, projects}) {
           {done&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
 
+        {/* Title */}
         <div style={{flex:1,minWidth:0}}>
           {isEditing ? (
             <input ref={titleRef} value={editTitle} onChange={e=>setEditTitle(e.target.value)}
@@ -1646,21 +1656,51 @@ function TasksGrid({tasks, setTasks, projects}) {
           )}
         </div>
 
-        <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-          {showMeta==="assignee" && task.assignee && (
-            <span style={{fontSize:11,color:C.muted}}>{task.assignee}</span>
-          )}
+        {/* Inline meta */}
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          {/* Project badge when grouped by assignee */}
           {showMeta==="phase" && ph && (
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <div style={{width:5,height:5,borderRadius:1,background:pc(ph.id),flexShrink:0}}/>
               <span style={{fontSize:11,color:C.muted}}>{ph.name}</span>
             </div>
           )}
-          <span style={{fontSize:11,color:C.faint,fontVariantNumeric:"tabular-nums"}}>{fmtD(task.start)} – {fmtD(task.end)}</span>
+
+          {/* Inline assignee */}
+          <input
+            value={task.assignee||""}
+            onChange={e=>setTasks(prev=>prev.map(t=>t.id===task.id?{...t,assignee:e.target.value}:t))}
+            onBlur={e=>saveField("assignee",e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&e.target.blur()}
+            placeholder="Assignee"
+            style={{
+              fontSize:11,color:C.muted,border:"none",background:"transparent",fontFamily:"inherit",
+              outline:"none",padding:0,width:task.assignee?task.assignee.length*7+8+"px":"62px",
+              minWidth:50,cursor:"text",
+            }}
+          />
+
+          {/* Inline start date */}
+          <input type="date" value={task.start||""}
+            onChange={e=>saveField("start",e.target.value)}
+            style={{fontSize:11,color:C.faint,border:"none",background:"transparent",fontFamily:"inherit",
+              cursor:"pointer",outline:"none",padding:0,width:86,fontVariantNumeric:"tabular-nums"}}/>
+
+          {/* Inline end date */}
+          <input type="date" value={task.end||""}
+            onChange={e=>saveField("end",e.target.value)}
+            placeholder="No end"
+            style={{fontSize:11,color:C.faint,border:"none",background:"transparent",fontFamily:"inherit",
+              cursor:"pointer",outline:"none",padding:0,width:86,fontVariantNumeric:"tabular-nums"}}/>
         </div>
 
+        {/* Click-through arrow */}
+        <button onClick={()=>onNavigate("project", task.project_id, task.id)}
+          style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 2px",lineHeight:1,opacity:isHov?1:0,transition:"opacity 0.1s",flexShrink:0}}>→</button>
+
+        {/* Delete */}
         <button onClick={()=>deleteTask(task.id)}
-          style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 2px",lineHeight:1,opacity:hovId===task.id?1:0,transition:"opacity 0.1s",flexShrink:0}}>✕</button>
+          style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 2px",lineHeight:1,opacity:isHov?1:0,transition:"opacity 0.1s",flexShrink:0}}>✕</button>
       </div>
     );
   };
@@ -2244,7 +2284,7 @@ export default function App() {
           {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
           {view==="timeline" &&<TimelineView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
-          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects}/>}
+          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} onNavigate={navigate}/>}
           {view==="budget"   &&<BudgetView projects={projects} expenses={expenses} tasks={tasks} onNavigate={navigate}/>}
           {view==="events"   &&<EventsView events={events} setEvents={setEvents} projects={projects}/>}
           {view==="settings" &&(
