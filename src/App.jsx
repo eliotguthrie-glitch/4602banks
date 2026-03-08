@@ -2377,7 +2377,7 @@ export default function App() {
                           const dbProj={name:title,status:"planning",budget:0,start_date:null,end_date:null,notes:"",phase_id:fa.id,sort_order:projects.length};
                           if(sidebarInputRef.current) sidebarInputRef.current.value="";
                           setSidebarAddingPhase(null);
-                          sbInsertRow("projects",dbProj).then(rows=>{if(rows?.[0])addProject(mapProject(rows[0]));}).catch(console.error);
+                          sbInsertRow("projects",dbProj).then(rows=>{if(rows?.[0])setProjects(prev=>[...prev,mapProject(rows[0])]);}).catch(console.error);
                         }
                         if(e.key==="Escape") setSidebarAddingPhase(null);
                       }}
