@@ -1170,7 +1170,15 @@ function EventsView({events,setEvents,projects}) {
 }
 
 // ── DASHBOARD ──────────────────────────────────────────────────────────────
-function Dashboard({projects,tasks,expenses,events,onNavigate}) {
+function Dashboard({projects,tasks,expenses,events,phases,onNavigate}) {
+  const phaseDateRange = (faId) => {
+    const ps = projects.filter(p=>String(p.phase_id)===String(faId)&&p.start&&p.end);
+    if(!ps.length) return {start:null,end:null};
+    return {
+      start: ps.reduce((min,p)=>p.start<min?p.start:min, ps[0].start),
+      end:   ps.reduce((max,p)=>p.end>max?p.end:max,     ps[0].end),
+    };
+  };
   const spent=expenses.reduce((s,e)=>s+e.amount,0);
   const allocated=projects.reduce((s,p)=>s+p.budget,0);
   const done=tasks.filter(t=>t.status==="complete").length;
@@ -1791,25 +1799,44 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
 // ── PHASES VIEW ──────────────────────────────────────────────────────────────
 function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, onDeletePhase}) {
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({name:"",notes:"",start:"",end:""});
+  const [form, setForm] = useState({name:"",notes:""});
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [editForm, setEditForm] = useState({name:"",notes:"",start:"",end:""});
+  const [editForm, setEditForm] = useState({name:"",notes:""});
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  // Compute date range for a phase from its child projects
+  const phaseRange = (faId) => {
+    const ps = projects.filter(p=>p.phase_id===faId&&p.start&&p.end);
+    if(!ps.length) return {start:null,end:null};
+    return {
+      start: ps.reduce((min,p)=>p.start<min?p.start:min, ps[0].start),
+      end:   ps.reduce((max,p)=>p.end>max?p.end:max,     ps[0].end),
+    };
+  };
+
+  // Sort phases by computed start date
+  const sortedPhases = [...phases].sort((a,b)=>{
+    const ra = phaseRange(a.id); const rb = phaseRange(b.id);
+    if(!ra.start && !rb.start) return 0;
+    if(!ra.start) return 1;
+    if(!rb.start) return -1;
+    return ra.start < rb.start ? -1 : 1;
+  });
 
   const addPhase = () => {
     if(!form.name) return;
     setSaving(true);
-    sbInsertRow("phases", {name:form.name, notes:form.notes, start_date:form.start||null, end_date:form.end||null, sort_order:phases.length}).then(rows=>{
+    sbInsertRow("phases", {name:form.name, notes:form.notes, sort_order:phases.length}).then(rows=>{
       if(rows?.[0]) onAddPhase(rows[0]);
-      setForm({name:"",notes:"",start:"",end:""});
+      setForm({name:"",notes:""});
       setShowAdd(false);
     }).catch(console.error).finally(()=>setSaving(false));
   };
 
   const saveEdit = (id) => {
     onUpdatePhase(id, editForm);
-    sbPatch("phases", id, {name:editForm.name, notes:editForm.notes, start_date:editForm.start||null, end_date:editForm.end||null}).catch(console.error);
+    sbPatch("phases", id, {name:editForm.name, notes:editForm.notes}).catch(console.error);
     setEditId(null);
   };
 
@@ -1829,21 +1856,9 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, on
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New phase</p>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-            <div style={{gridColumn:"1/-1"}}>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
-              <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. 2026 Renovation, Phase 1"/>
-            </div>
-            <div>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Start date</p>
-              <input type="date" value={form.start||""} onChange={e=>setForm(f=>({...f,start:e.target.value}))}
-                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
-            </div>
-            <div>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>End date</p>
-              <input type="date" value={form.end||""} onChange={e=>setForm(f=>({...f,end:e.target.value}))}
-                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
-            </div>
+          <div style={{marginBottom:10}}>
+            <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
+            <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. 2026 Renovation, Phase 1"/>
           </div>
           <div style={{marginBottom:14}}>
             <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
@@ -1862,28 +1877,16 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, on
         </div>
       )}
 
-      {phases.map(fa=>{
+      {sortedPhases.map(fa=>{
         const faProjects=projects.filter(p=>p.phase_id===fa.id);
         const totalBudget=faProjects.reduce((s,p)=>s+p.budget,0);
         return(
           <div key={fa.id} style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface,marginBottom:16}}>
             {editId===fa.id?(
               <div style={{padding:"14px 18px",background:C.bg,borderBottom:`1px solid ${C.divider}`}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-                  <div style={{gridColumn:"1/-1"}}>
-                    <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
-                    <Input value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))}/>
-                  </div>
-                  <div>
-                    <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Start date</p>
-                    <input type="date" value={editForm.start||""} onChange={e=>setEditForm(f=>({...f,start:e.target.value}))}
-                      style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
-                  </div>
-                  <div>
-                    <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>End date</p>
-                    <input type="date" value={editForm.end||""} onChange={e=>setEditForm(f=>({...f,end:e.target.value}))}
-                      style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
-                  </div>
+                <div style={{marginBottom:10}}>
+                  <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
+                  <Input value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))}/>
                 </div>
                 <div style={{marginBottom:10}}>
                   <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
@@ -1908,13 +1911,13 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, on
               <div style={{padding:"14px 18px",borderBottom:faProjects.length>0?`1px solid ${C.divider}`:"none",display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg}}>
                 <div>
                   <p style={{fontSize:15,fontWeight:700,color:C.text}}>{fa.name}</p>
-                  {(fa.start||fa.end)&&<p style={{fontSize:12,color:C.muted,marginTop:1}}>{fmtD(fa.start)} → {fmtD(fa.end)}</p>}
+                  {(()=>{const r=phaseRange(fa.id);return r.start?<p style={{fontSize:12,color:C.muted,marginTop:1}}>{fmtD(r.start)} → {fmtD(r.end)}</p>:null;})()}
                   {fa.notes&&<p style={{fontSize:12,color:C.muted,marginTop:1}}>{fa.notes}</p>}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:12,color:C.muted}}>{faProjects.length} project{faProjects.length!==1?"s":""} · {fmtM(totalBudget)} total</span>
                   <Btn onClick={()=>onNavigate("projects")} style={{fontSize:11}}>+ Add project</Btn>
-                  <Btn onClick={()=>{setEditId(fa.id);setEditForm({name:fa.name,notes:fa.notes||"",start:fa.start||"",end:fa.end||""});setConfirmDeleteId(null);}}>Edit</Btn>
+                  <Btn onClick={()=>{setEditId(fa.id);setEditForm({name:fa.name,notes:fa.notes||""});setConfirmDeleteId(null);}}>Edit</Btn>
                 </div>
               </div>
             )}
