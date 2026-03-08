@@ -139,8 +139,8 @@ const toISO       = ms   => new Date(ms).toISOString().split("T")[0];
 const daysBetween = (a,b)=> Math.round((toMs(b)-toMs(a))/86400000);
 const addDays     = (s,n)=> toISO(toMs(s)+n*86400000);
 const datePct     = (d,s,e)=> Math.max(0,Math.min(100,((toMs(d)-toMs(s))/(toMs(e)-toMs(s)))*100));
-const fmtD        = s    => new Date(s+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
-const fmtFull     = s    => new Date(s+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+const fmtD        = s    => s ? new Date(s+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—";
+const fmtFull     = s    => s ? new Date(s+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "—";
 const fmtM        = n    => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n);
 const uid         = ()   => Math.random().toString(36).slice(2,9);
 
@@ -192,7 +192,7 @@ function PhotoGrid({photos,onAdd,onRemove}) {
 
 function NoteField({value,onChange,placeholder="Add notes...",rows=4}) {
   return (
-    <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    <textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
       style={{width:"100%",resize:"vertical",border:`1px solid ${C.border}`,borderRadius:6,padding:"9px 12px",fontSize:13,color:C.text,background:C.bg,fontFamily:"inherit",lineHeight:1.6,outline:"none",boxSizing:"border-box"}}
       onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
   );
@@ -521,7 +521,7 @@ function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onA
             </div>
           </div>
           <div style={{padding:"12px 16px"}}>
-            <PhotoGrid photos={task.photos} onAdd={p=>onUpdateTask(task.id,t=>({...t,photos:[...t.photos,p]}))} onRemove={id=>onUpdateTask(task.id,t=>({...t,photos:t.photos.filter(p=>p.id!==id)}))}/>
+            <PhotoGrid photos={task.photos} onAdd={p=>onUpdateTask(task.id,t=>({...t,photos:[...(t.photos||[]),p]}))} onRemove={id=>onUpdateTask(task.id,t=>({...t,photos:(t.photos||[]).filter(p=>p.id!==id)}))}/>
           </div>
         </div>
       </div>
@@ -810,10 +810,10 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function ProjectPage({project,tasks,expenses,quotes,phases,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
+function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
   const phase = project; // alias for minimal churn
   const [tab,setTab]=useState("tasks");
-  const [activeTaskId,setActiveTaskId]=useState(null);
+  const [activeTaskId,setActiveTaskId]=useState(initialTaskId||null);
   const [editing,setEditing]=useState(false);
   const [addingTask,setAddingTask]=useState(false);
   const projectTaskRef=useRef(null);
@@ -862,7 +862,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,onNavigate,onUpdatePr
     if(projectTaskRef.current) projectTaskRef.current.value = "";
     setAddingTask(false);
     sbInsertRow("tasks", dbTask).then(rows=>{
-      if(rows?.[0]) onUpdateTask(rows[0].id, ()=>mapTask(rows[0]), true);
+      if(rows?.[0]) onAddTasks([mapTask(rows[0])]);
     }).catch(err=>alert("Failed: "+err.message));
   };
 
@@ -1013,7 +1013,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,onNavigate,onUpdatePr
                 </div>
                 <Avatar name={t.assignee}/>
                 <Chip status={t.status}/>
-                {t.price>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(t.price)}</span>}{(t.photos.length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{t.photos.length>0?"📷":""}{t.notes?"📝":""}</span>}
+                {t.price>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(t.price)}</span>}{((t.photos||[]).length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{(t.photos||[]).length>0?"📷":""}{t.notes?"📝":""}</span>}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
             ))}
@@ -2354,7 +2354,12 @@ export default function App() {
   };
 
   const addTasks = newTasks => {
-    const dbTasks = newTasks.map(t=>({
+    // If tasks already have an id (already inserted, e.g. from SubtaskPanel), just add to state
+    const alreadyInserted = newTasks.filter(t=>t.id);
+    const toInsert = newTasks.filter(t=>!t.id);
+    if(alreadyInserted.length) setTasks(prev=>[...prev,...alreadyInserted]);
+    if(!toInsert.length) return;
+    const dbTasks = toInsert.map(t=>({
       project_id:t.project_id, title:t.title, assignee:t.assignee||"",
       start_date:t.start||TODAY, end_date:t.end||addDays(TODAY,7),
       status:"todo", notes:t.notes||"", sort_order:0,
@@ -2459,7 +2464,7 @@ export default function App() {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
+        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} initialTaskId={page?.taskId||null} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
