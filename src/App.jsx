@@ -767,9 +767,17 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(null);
   const [editing,setEditing]=useState(false);
-  const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||""});
+  const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual"});
   const [confirmDelete,setConfirmDelete]=useState(false);
   const projectTasks=tasks.filter(t=>t.project_id===phase.id);
+  const taskDerivedDates = useMemo(()=>{
+    const ts=projectTasks.filter(t=>t.start&&t.end);
+    if(!ts.length) return {start:"",end:""};
+    return {
+      start: ts.reduce((min,t)=>t.start<min?t.start:min, ts[0].start),
+      end:   ts.reduce((max,t)=>t.end>max?t.end:max,     ts[0].end),
+    };
+  },[projectTasks]);
   const spent=expenses.filter(e=>e.project_id===phase.id).reduce((s,e)=>s+e.amount,0);
   const projectQuote=quotes.find(q=>q.project_id===phase.id);
 
@@ -779,11 +787,14 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
   }
 
   const saveEdit = () => {
-    const updated = {...phase, ...editForm, budget:parseInt(editForm.budget)||0};
+    const resolvedStart = editForm.datesMode==="tasks" ? (taskDerivedDates.start||editForm.start) : editForm.start;
+    const resolvedEnd   = editForm.datesMode==="tasks" ? (taskDerivedDates.end||editForm.end)     : editForm.end;
+    const updated = {...phase, ...editForm, start:resolvedStart, end:resolvedEnd, budget:parseInt(editForm.budget)||0};
     onUpdateProject(phase.id, ()=>updated);
     sbPatch("projects", phase.id, {
       name:editForm.name, status:editForm.status, budget:parseInt(editForm.budget)||0,
-      start_date:editForm.start, end_date:editForm.end, notes:editForm.notes,
+      start_date:resolvedStart, end_date:resolvedEnd, notes:editForm.notes,
+      dates_mode:editForm.datesMode,
     }).catch(console.error);
     setEditing(false);
   };
@@ -818,16 +829,37 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
                 <option value="on_hold">On hold</option>
               </select>
             </div>
-            <div>
+            <div style={{gridColumn:"1/-1"}}>
+              <p style={{fontSize:11,color:C.muted,marginBottom:6,fontWeight:500}}>Timeline</p>
+              <div style={{display:"flex",gap:6,marginBottom:editForm.datesMode==="manual"?10:0}}>
+                {[{v:"manual",l:"Manual"},{v:"tasks",l:"From tasks"}].map(({v,l})=>(
+                  <button key={v} onClick={()=>setEditForm(f=>({...f,datesMode:v}))}
+                    style={{padding:"4px 12px",fontSize:12,fontWeight:500,borderRadius:5,cursor:"pointer",
+                      border:"1px solid "+(editForm.datesMode===v?C.accent:C.border),
+                      background:editForm.datesMode===v?C.accentBg:C.surface,
+                      color:editForm.datesMode===v?C.accent:C.muted}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {editForm.datesMode==="tasks"&&(
+                <p style={{fontSize:12,color:C.muted,marginTop:6}}>
+                  {taskDerivedDates.start
+                    ? fmtD(taskDerivedDates.start)+" → "+fmtD(taskDerivedDates.end)+" (from "+projectTasks.filter(t=>t.start&&t.end).length+" tasks)"
+                    : "No tasks with dates yet"}
+                </p>
+              )}
+            </div>
+            {editForm.datesMode==="manual"&&<div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Start</p>
-              <input type="date" value={editForm.start} onChange={e=>setEditForm(f=>({...f,start:e.target.value}))}
+              <input type="date" value={editForm.start||""} onChange={e=>setEditForm(f=>({...f,start:e.target.value}))}
                 style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
-            </div>
-            <div>
+            </div>}
+            {editForm.datesMode==="manual"&&<div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>End</p>
-              <input type="date" value={editForm.end} onChange={e=>setEditForm(f=>({...f,end:e.target.value}))}
+              <input type="date" value={editForm.end||""} onChange={e=>setEditForm(f=>({...f,end:e.target.value}))}
                 style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
-            </div>
+            </div>}
             <div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Budget ($)</p>
               <Input value={String(editForm.budget)} onChange={v=>setEditForm(f=>({...f,budget:v}))}/>
@@ -872,7 +904,7 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
             <p style={{fontSize:18,fontWeight:600,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(phase.budget)}</p>
             <p style={{fontSize:12,color:C.muted}}>{fmtM(spent)} spent · {fmtM(phase.budget-spent)} left</p>
           </div>
-          <Btn onClick={()=>{setEditing(s=>!s);setConfirmDelete(false);setEditForm({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||""});}}>
+          <Btn onClick={()=>{setEditing(s=>!s);setConfirmDelete(false);setEditForm({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual"});}}>
             {editing?"Cancel":"Edit"}
           </Btn>
         </div>
@@ -1084,10 +1116,10 @@ function EventsView({events,setEvents,projects}) {
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Phase (optional)</p>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Project (optional)</p>
               <select value={form.project_id} onChange={e=>setForm(f=>({...f,project_id:e.target.value}))}
                 style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
-                <option value="">— No phase —</option>
+                <option value="">— No project —</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
@@ -1554,6 +1586,7 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
   const [newTitle,   setNewTitle]   = useState("");
   const titleRef = useRef(null);
   const newRef   = useRef(null);
+  const justCommitted = useRef(false);
 
   useEffect(()=>{ if(editingId && titleRef.current) titleRef.current.focus(); },[editingId]);
   useEffect(()=>{ if(addingTo  && newRef.current)   newRef.current.focus();   },[addingTo]);
@@ -1773,8 +1806,8 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
                   <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px"}}>
                     <div style={{width:15,height:15,borderRadius:3,flexShrink:0,border:"1.5px solid "+C.faint}}/>
                     <input ref={newRef} value={newTitle} onChange={e=>setNewTitle(e.target.value)}
-                      onBlur={()=>commitAdd(group.key, group.addPhaseId)}
-                      onKeyDown={e=>{if(e.key==="Enter") commitAdd(group.key,group.addPhaseId,true); if(e.key==="Escape"){setAddingTo(null);setNewTitle("");}}}
+                      onBlur={()=>{ if(justCommitted.current){justCommitted.current=false;return;} commitAdd(group.key, group.addPhaseId); }}
+                      onKeyDown={e=>{if(e.key==="Enter"){justCommitted.current=true;commitAdd(group.key,group.addPhaseId,true);} if(e.key==="Escape"){setAddingTo(null);setNewTitle("");}}}
                       placeholder="Task name"
                       style={{flex:1,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",fontSize:13,color:C.text,padding:0}}/>
                   </div>
