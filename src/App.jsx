@@ -2139,8 +2139,8 @@ export default function App() {
   const loadData = useCallback(() => {
     setLoading(true);
     Promise.all([
-      sbQ("phases",     "select=*&order=sort_order.asc"),
       sbQ("team_members","select=*&order=name.asc"),
+      sbQ("phases",     "select=*&order=sort_order.asc"),
       sbQ("projects",   "select=*&order=sort_order.asc"),
       sbQ("tasks",    "select=*&order=sort_order.asc"),
       sbQ("expenses", "select=*"),
