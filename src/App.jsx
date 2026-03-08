@@ -372,7 +372,7 @@ function QuoteComparison({quote,onUpdate,phaseName}) {
 }
 
 // ── TASK DETAIL ────────────────────────────────────────────────────────────
-function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent}) {
+function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent,team}) {
   const [addedToCalendar, setAddedToCalendar] = useState(false);
   const convertToEvent = () => {
     const ev = {
@@ -417,7 +417,16 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent}) {
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr"}}>
           {[
             {label:"Project",value:<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:7,height:7,borderRadius:2,background:pc(phase.id)}}/><span style={{fontSize:13,color:C.text}}>{phase.name}</span></div>},
-            {label:"Assignee",value:<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name={task.assignee}/><span style={{fontSize:13,color:C.text}}>{task.assignee||"—"}</span></div>},
+            {label:"Assignee",value:(
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <Avatar name={task.assignee}/>
+                <select value={task.assignee||""} onChange={e=>{const v=e.target.value;onUpdateTask(task.id,t=>({...t,assignee:v}));sbPatch("tasks",task.id,{assignee:v}).catch(console.error);}}
+                  style={{fontSize:13,color:C.text,border:"none",background:"transparent",fontFamily:"inherit",outline:"none",cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}>
+                  <option value="">— Unassigned —</option>
+                  {(team||[]).map(m=><option key={m.id} value={m.name}>{m.name}</option>)}
+                </select>
+              </div>
+            )},
             {label:"Duration",value:<span style={{fontSize:13,color:C.text}}>{task.end?daysBetween(task.start,task.end)+" days":"—"}</span>},
             {label:"Cost ($)",value:(
               <input type="number" min="0" defaultValue={task.price||""} placeholder="0"
@@ -753,7 +762,7 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent}) {
+function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
   const phase = project; // alias for minimal churn
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(null);
@@ -766,7 +775,7 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
 
   if(activeTaskId){
     const t=tasks.find(x=>x.id===activeTaskId);
-    if(t) return <TaskPage task={t} phase={phase} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddEvent={onAddEvent}/>;
+    if(t) return <TaskPage task={t} phase={phase} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddEvent={onAddEvent} team={team}/>;
   }
 
   const saveEdit = () => {
@@ -1527,7 +1536,7 @@ function BudgetView({projects,expenses,tasks,onNavigate}) {
 }
 
 // ── TASKS GRID ─────────────────────────────────────────────────────────────
-function TasksGrid({tasks, setTasks, projects, onNavigate}) {
+function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
   const [groupBy,    setGroupBy]    = useState("phase"); // "phase" | "assignee" | "date"
   const [editingId,  setEditingId]  = useState(null);
   const [editTitle,  setEditTitle]  = useState("");
@@ -1666,19 +1675,19 @@ function TasksGrid({tasks, setTasks, projects, onNavigate}) {
             </div>
           )}
 
-          {/* Inline assignee */}
-          <input
+          {/* Inline assignee dropdown */}
+          <select
             value={task.assignee||""}
-            onChange={e=>setTasks(prev=>prev.map(t=>t.id===task.id?{...t,assignee:e.target.value}:t))}
-            onBlur={e=>saveField("assignee",e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&e.target.blur()}
-            placeholder="Assignee"
+            onChange={e=>saveField("assignee",e.target.value)}
             style={{
-              fontSize:11,color:C.muted,border:"none",background:"transparent",fontFamily:"inherit",
-              outline:"none",padding:0,width:task.assignee?task.assignee.length*7+8+"px":"62px",
-              minWidth:50,cursor:"text",
+              fontSize:11,color:task.assignee?C.muted:C.faint,border:"none",background:"transparent",
+              fontFamily:"inherit",outline:"none",padding:0,cursor:"pointer",
+              appearance:"none",WebkitAppearance:"none",maxWidth:90,
             }}
-          />
+          >
+            <option value="">Assignee</option>
+            {(team||[]).map(m=><option key={m.id} value={m.name}>{m.name}</option>)}
+          </select>
 
           {/* Inline start date */}
           <input type="date" value={task.start||""}
@@ -2118,6 +2127,7 @@ export default function App() {
   const [loading,   setLoading]   = useState(false);
   const [view,      setView]      = useState("dashboard");
   const [phases,    setPhases]     = useState([]);
+  const [team,      setTeam]       = useState([]);
   const [projects,  setProjects]    = useState([]);
   const [tasks,     setTasks]     = useState([]);
   const [expenses,  setExpenses]  = useState([]);
@@ -2130,12 +2140,14 @@ export default function App() {
     setLoading(true);
     Promise.all([
       sbQ("phases",     "select=*&order=sort_order.asc"),
+      sbQ("team_members","select=*&order=name.asc"),
       sbQ("projects",   "select=*&order=sort_order.asc"),
       sbQ("tasks",    "select=*&order=sort_order.asc"),
       sbQ("expenses", "select=*"),
       sbQ("events",   "select=*&order=event_date.asc"),
       sbFetch("/rest/v1/quotes?select=*,quote_contractors!quote_contractors_quote_id_fkey(*),quote_items(*,quote_item_amounts(*))"),
-    ]).then(([fa,ph,ta,ex,ev,qu])=>{
+    ]).then(([tm,fa,ph,ta,ex,ev,qu])=>{
+      setTeam(tm);
       setPhases(fa.map(f=>({...f})));
       setProjects(ph.map(mapProject));
       setTasks(ta.map(mapTask));
@@ -2157,7 +2169,7 @@ export default function App() {
     AUTH_TOKEN = null;
     localStorage.removeItem("4602banks_session");
     setSession(null);
-    setPhases([]); setProjects([]); setTasks([]); setExpenses([]); setEvents([]); setQuotes([]);
+    setTeam([]); setPhases([]); setProjects([]); setTasks([]); setExpenses([]); setEvents([]); setQuotes([]);
   };
 
   // Restore session on mount
@@ -2277,14 +2289,14 @@ export default function App() {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])}/>}
+        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
           {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
           {view==="timeline" &&<TimelineView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
-          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} onNavigate={navigate}/>}
+          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} onNavigate={navigate} team={team}/>}
           {view==="budget"   &&<BudgetView projects={projects} expenses={expenses} tasks={tasks} onNavigate={navigate}/>}
           {view==="events"   &&<EventsView events={events} setEvents={setEvents} projects={projects}/>}
           {view==="settings" &&(
