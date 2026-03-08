@@ -372,7 +372,22 @@ function QuoteComparison({quote,onUpdate,phaseName}) {
 }
 
 // ── TASK DETAIL ────────────────────────────────────────────────────────────
-function TaskPage({task,phase,onBack,onNavigate,onUpdateTask}) {
+function TaskPage({task,phase,onBack,onNavigate,onUpdateTask,onAddEvent}) {
+  const [addedToCalendar, setAddedToCalendar] = useState(false);
+  const convertToEvent = () => {
+    const ev = {
+      title: task.title,
+      event_date: task.start,
+      event_type: "milestone",
+      project_id: task.project_id,
+      notes: task.notes||"",
+      done: false,
+    };
+    sbInsertRow("events", ev).then(rows=>{
+      if(rows?.[0]) onAddEvent(mapEvent(rows[0]));
+      setAddedToCalendar(true);
+    }).catch(console.error);
+  };
   return (
     <div style={{padding:"32px 40px",maxWidth:760}}>
       <Breadcrumb crumbs={[{label:"Overview",onClick:()=>onNavigate("dashboard")},{label:phase.name,onClick:onBack},{label:task.title}]}/>
@@ -385,7 +400,11 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask}) {
             <span style={{fontSize:12,color:C.muted}}>· {daysBetween(task.start,task.end)} days</span>
           </div>
         </div>
-        <div style={{display:"flex",gap:6,flexShrink:0}}>
+        <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
+          {addedToCalendar
+            ? <span style={{fontSize:12,color:C.green,fontWeight:500}}>✓ Added to calendar</span>
+            : <button onClick={convertToEvent} style={{padding:"5px 10px",fontSize:12,fontWeight:500,borderRadius:5,cursor:"pointer",border:`1px solid ${C.border}`,background:C.surface,color:C.muted,marginRight:4}}>Add to calendar</button>
+          }
           {["todo","in_progress","complete"].map(s=>(
             <button key={s} onClick={()=>onUpdateTask(task.id,t=>({...t,status:s}))} style={{padding:"5px 10px",fontSize:12,fontWeight:500,borderRadius:5,cursor:"pointer",border:`1px solid ${task.status===s?C.accent:C.border}`,background:task.status===s?C.accentBg:C.surface,color:task.status===s?C.accent:C.muted}}>
               {{todo:"To do",in_progress:"In progress",complete:"Done"}[s]}
@@ -395,17 +414,33 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask}) {
       </div>
 
       <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,marginBottom:16}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr"}}>
           {[
             {label:"Project",value:<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:7,height:7,borderRadius:2,background:pc(phase.id)}}/><span style={{fontSize:13,color:C.text}}>{phase.name}</span></div>},
-            {label:"Assignee",value:<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name={task.assignee}/><span style={{fontSize:13,color:C.text}}>{task.assignee}</span></div>},
+            {label:"Assignee",value:<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name={task.assignee}/><span style={{fontSize:13,color:C.text}}>{task.assignee||"—"}</span></div>},
             {label:"Duration",value:<span style={{fontSize:13,color:C.text}}>{daysBetween(task.start,task.end)} days</span>},
           ].map(({label,value},i)=>(
-            <div key={label} style={{padding:"14px 18px",borderRight:i<2?`1px solid ${C.divider}`:"none"}}>
+            <div key={label} style={{padding:"14px 18px",borderRight:`1px solid ${C.divider}`}}>
               <p style={{fontSize:11,color:C.muted,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{label}</p>
               {value}
             </div>
           ))}
+          <div style={{padding:"14px 18px",borderRight:`1px solid ${C.divider}`}}>
+            <p style={{fontSize:11,color:C.muted,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Start</p>
+            <input type="date" value={task.start} onChange={e=>{
+              const v=e.target.value;
+              onUpdateTask(task.id,t=>({...t,start:v}));
+              sbPatch("tasks",task.id,{start_date:v}).catch(console.error);
+            }} style={{fontSize:13,color:C.text,border:"none",background:"transparent",fontFamily:"inherit",cursor:"pointer",outline:"none",padding:0,width:"100%"}}/>
+          </div>
+          <div style={{padding:"14px 18px"}}>
+            <p style={{fontSize:11,color:C.muted,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>End</p>
+            <input type="date" value={task.end} onChange={e=>{
+              const v=e.target.value;
+              onUpdateTask(task.id,t=>({...t,end:v}));
+              sbPatch("tasks",task.id,{end_date:v}).catch(console.error);
+            }} style={{fontSize:13,color:C.text,border:"none",background:"transparent",fontFamily:"inherit",cursor:"pointer",outline:"none",padding:0,width:"100%"}}/>
+          </div>
         </div>
       </div>
 
@@ -713,7 +748,7 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject}) {
+function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent}) {
   const phase = project; // alias for minimal churn
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(null);
@@ -726,7 +761,7 @@ function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,o
 
   if(activeTaskId){
     const t=tasks.find(x=>x.id===activeTaskId);
-    if(t) return <TaskPage task={t} phase={phase} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask}/>;
+    if(t) return <TaskPage task={t} phase={phase} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddEvent={onAddEvent}/>;
   }
 
   const saveEdit = () => {
@@ -1517,14 +1552,15 @@ function TasksGrid({tasks, setTasks, projects}) {
   const toggleCollapse = key => setCollapsed(s=>({...s,[key]:!s[key]}));
   const startAdd  = key => { setAddingTo(key); setNewTitle(""); };
 
-  const commitAdd = (key, defaultPhaseId) => {
+  const commitAdd = (key, defaultPhaseId, continueAdding=false) => {
     if(!newTitle.trim()) { setAddingTo(null); setNewTitle(""); return; }
     const dbTask = {
       project_id: defaultPhaseId||projects[0]?.id||1, title:newTitle.trim(),
       assignee:"", start_date:TODAY, end_date:addDays(TODAY,7),
       status:"todo", notes:"", sort_order:0,
     };
-    setAddingTo(null); setNewTitle("");
+    setNewTitle("");
+    if(!continueAdding) setAddingTo(null);
     sbInsertRow("tasks", dbTask).then(rows=>{
       if(rows?.[0]) setTasks(prev=>[...prev, mapTask(rows[0])]);
     }).catch(console.error);
@@ -1671,7 +1707,7 @@ function TasksGrid({tasks, setTasks, projects}) {
                     <div style={{width:15,height:15,borderRadius:3,flexShrink:0,border:"1.5px solid "+C.faint}}/>
                     <input ref={newRef} value={newTitle} onChange={e=>setNewTitle(e.target.value)}
                       onBlur={()=>commitAdd(group.key, group.addPhaseId)}
-                      onKeyDown={e=>{if(e.key==="Enter") commitAdd(group.key,group.addPhaseId); if(e.key==="Escape"){setAddingTo(null);setNewTitle("");}}}
+                      onKeyDown={e=>{if(e.key==="Enter") commitAdd(group.key,group.addPhaseId,true); if(e.key==="Escape"){setAddingTo(null);setNewTitle("");}}}
                       placeholder="Task name"
                       style={{flex:1,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",fontSize:13,color:C.text,padding:0}}/>
                   </div>
@@ -2191,7 +2227,7 @@ export default function App() {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject}/>}
+        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])}/>}
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
