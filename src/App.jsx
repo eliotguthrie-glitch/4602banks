@@ -1617,15 +1617,15 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
     if(!title) { setAddingTo(null); return; }
     const dbTask = {
       project_id: defaultPhaseId||projects[0]?.id||1, title,
-      assignee:"", start_date:TODAY, end_date:addDays(TODAY,7),
-      status:"todo", notes:"", price:0, sort_order:0,
+      assignee:"", start_date:TODAY,
+      status:"todo", notes:"", sort_order:0,
     };
     if(newRef.current) newRef.current.value = "";
     if(!continueAdding) { setAddingTo(null); }
     else { setTimeout(()=>{ if(newRef.current) newRef.current.focus(); }, 0); }
     sbInsertRow("tasks", dbTask).then(rows=>{
       if(rows?.[0]) setTasks(prev=>[...prev, mapTask(rows[0])]);
-    }).catch(console.error);
+    }).catch(err=>{ console.error(err); alert("Failed to save task: "+err.message); });
   };
 
   // ── Build groups ──────────────────────────────────────────────────────────
@@ -1805,13 +1805,18 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
 
                 {/* Add task — only for phase and assignee groupings */}
                 {group.addPhaseId && (addingTo===group.key ? (
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px"}}>
                     <div style={{width:15,height:15,borderRadius:3,flexShrink:0,border:"1.5px solid "+C.faint}}/>
                     <input ref={newRef} defaultValue=""
-                      onBlur={()=>{ const v=(newRef.current?.value||"").trim(); if(v) commitAdd(group.key,group.addPhaseId); else setAddingTo(null); }}
                       onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitAdd(group.key,group.addPhaseId,true);} if(e.key==="Escape") setAddingTo(null);}}
-                      placeholder="Task name"
+                      placeholder="Task name — press Enter or click ✓"
                       style={{flex:1,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",fontSize:13,color:C.text,padding:0}}/>
+                    <button
+                      onMouseDown={e=>{e.preventDefault();commitAdd(group.key,group.addPhaseId,false);}}
+                      style={{background:"none",border:"none",cursor:"pointer",color:C.accent,fontSize:14,padding:"0 4px",lineHeight:1,flexShrink:0}}>✓</button>
+                    <button
+                      onMouseDown={e=>{e.preventDefault();setAddingTo(null);}}
+                      style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 4px",lineHeight:1,flexShrink:0}}>✕</button>
                   </div>
                 ) : (
                   <button onClick={()=>startAdd(group.key)}
