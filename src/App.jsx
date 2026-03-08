@@ -2207,6 +2207,9 @@ export default function App() {
   const [loading,   setLoading]   = useState(false);
   const [view,      setView]      = useState("dashboard");
   const [phases,    setPhases]     = useState([]);
+  const [sidebarAddingPhase, setSidebarAddingPhase] = useState(null);
+  const [sidebarNewProject,  setSidebarNewProject]  = useState("");
+  const sidebarInputRef = useRef(null);
   const [team,      setTeam]       = useState([]);
   const [projects,  setProjects]    = useState([]);
   const [tasks,     setTasks]     = useState([]);
@@ -2347,14 +2350,42 @@ export default function App() {
           <div style={{height:1,background:C.divider,margin:"10px 2px"}}/>
           {phases.map((fa,fi)=>{
             const faProjects=projects.filter(p=>p.phase_id===fa.id);
+            const isAddingHere = sidebarAddingPhase===fa.id;
             return(
               <div key={fa.id}>
-                <p style={{fontSize:10,fontWeight:600,color:C.faint,textTransform:"uppercase",letterSpacing:"0.08em",padding:"4px 10px 4px",marginTop:fi>0?8:0}}>{fa.name}</p>
+                <div style={{display:"flex",alignItems:"center",padding:"4px 10px 4px",marginTop:fi>0?8:0}}
+                  onMouseEnter={e=>e.currentTarget.querySelector(".addproj").style.opacity="1"}
+                  onMouseLeave={e=>e.currentTarget.querySelector(".addproj").style.opacity="0"}>
+                  <p style={{fontSize:10,fontWeight:600,color:C.faint,textTransform:"uppercase",letterSpacing:"0.08em",flex:1}}>{fa.name}</p>
+                  <button className="addproj" onClick={()=>{setSidebarAddingPhase(fa.id);setSidebarNewProject("");setTimeout(()=>sidebarInputRef.current?.focus(),0);}}
+                    style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 2px",lineHeight:1,opacity:0,transition:"opacity 0.1s"}}>+</button>
+                </div>
                 {faProjects.map(pr=>{const active=showProjectPage&&page.projectId===pr.id;return(
                   <button key={pr.id} onClick={()=>navigate("project",pr.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:12,textAlign:"left",transition:"background 0.1s"}}>
                     <div style={{width:6,height:6,borderRadius:2,background:pc(pr.id),flexShrink:0}}/>{pr.name}
                   </button>
                 );})}
+                {isAddingHere&&(
+                  <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px"}}>
+                    <div style={{width:6,height:6,borderRadius:2,background:C.faint,flexShrink:0}}/>
+                    <input ref={sidebarInputRef} defaultValue=""
+                      onKeyDown={e=>{
+                        if(e.key==="Enter"){
+                          e.preventDefault();
+                          const title=(sidebarInputRef.current?.value||"").trim();
+                          if(!title){setSidebarAddingPhase(null);return;}
+                          const dbProj={name:title,status:"planning",budget:0,start_date:null,end_date:null,notes:"",phase_id:fa.id,sort_order:projects.length};
+                          if(sidebarInputRef.current) sidebarInputRef.current.value="";
+                          setSidebarAddingPhase(null);
+                          sbInsertRow("projects",dbProj).then(rows=>{if(rows?.[0])addProject(mapProject(rows[0]));}).catch(console.error);
+                        }
+                        if(e.key==="Escape") setSidebarAddingPhase(null);
+                      }}
+                      onBlur={()=>setSidebarAddingPhase(null)}
+                      placeholder="Project name…"
+                      style={{flex:1,fontSize:12,border:"none",outline:"none",background:"transparent",fontFamily:"inherit",color:C.text,padding:0}}/>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2373,7 +2404,7 @@ export default function App() {
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
-          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
+          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={addProject}/>}
           {view==="timeline" &&<TimelineView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} onNavigate={navigate} team={team}/>}
