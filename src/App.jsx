@@ -1130,7 +1130,7 @@ function Dashboard({projects,tasks,expenses,events,onNavigate}) {
         <h1 style={{fontSize:22,fontWeight:700,color:C.text,letterSpacing:"-0.3px"}}>{PROJECT.name}</h1>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",marginBottom:22,background:C.border}}>
-        {[{l:"Total budget",v:fmtM(PROJECT.total_budget)},{l:"Allocated",v:fmtM(allocated)},{l:"Spent",v:fmtM(spent)},{l:"Tasks done",v:`${done} / ${tasks.length}`}].map(({l,v})=>(
+        {[{l:"Total budget",v:fmtM(allocated)},{l:"Allocated",v:fmtM(allocated)},{l:"Spent",v:fmtM(spent)},{l:"Tasks done",v:`${done} / ${tasks.length}`}].map(({l,v})=>(
           <div key={l} style={{background:C.surface,padding:"14px 18px"}}>
             <p style={{fontSize:11,color:C.muted,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>{l}</p>
             <p style={{fontSize:18,fontWeight:600,color:C.text,fontVariantNumeric:"tabular-nums"}}>{v}</p>
@@ -1441,7 +1441,7 @@ function WeeklyView({tasks,setTasks,projects,onNavigate}) {
 
 // ── BUDGET ─────────────────────────────────────────────────────────────────
 function BudgetView({projects,expenses,onNavigate}) {
-  const totalB=PROJECT.total_budget,allocated=projects.reduce((s,p)=>s+p.budget,0),totalSpent=expenses.reduce((s,e)=>s+e.amount,0);
+  const allocated=projects.reduce((s,p)=>s+p.budget,0);const totalB=allocated,totalSpent=expenses.reduce((s,e)=>s+e.amount,0);
   return (
     <div style={{padding:"32px 40px"}}>
       <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px",marginBottom:18}}>Budget</h2>
