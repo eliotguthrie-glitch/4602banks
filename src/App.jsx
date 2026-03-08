@@ -1691,6 +1691,124 @@ function TasksGrid({tasks, setTasks, phases}) {
   );
 }
 
+// ── PHASES VIEW ────────────────────────────────────────────────────────────
+function PhasesView({phases, tasks, expenses, onNavigate, onAddPhase}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({name:"",status:"planning",budget:"",start:"",end:"",notes:""});
+  const [saving, setSaving] = useState(false);
+
+  const addPhase = () => {
+    if(!form.name||!form.start||!form.end) return;
+    setSaving(true);
+    const dbPhase = {
+      name:form.name, status:form.status, budget:parseInt(form.budget)||0,
+      start_date:form.start, end_date:form.end, notes:form.notes,
+      sort_order: phases.length,
+    };
+    sbInsertRow("phases", dbPhase).then(rows=>{
+      if(rows?.[0]) onAddPhase(mapPhase(rows[0]));
+      setForm({name:"",status:"planning",budget:"",start:"",end:"",notes:""});
+      setShowAdd(false);
+    }).catch(console.error).finally(()=>setSaving(false));
+  };
+
+  return (
+    <div style={{padding:"32px 40px", maxWidth:800}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
+        <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Phases</h2>
+        <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>+ Add phase</Btn>
+      </div>
+
+      {showAdd&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
+          <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New phase</p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={{gridColumn:"1/-1"}}>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
+              <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. Roof, Flooring, Electrical"/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Status</p>
+              <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
+                <option value="planning">Planning</option>
+                <option value="active">Active</option>
+                <option value="complete">Complete</option>
+                <option value="on_hold">On hold</option>
+              </select>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Budget ($)</p>
+              <Input value={form.budget} onChange={v=>setForm(f=>({...f,budget:v}))} placeholder="0"/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Start date</p>
+              <input type="date" value={form.start} onChange={e=>setForm(f=>({...f,start:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>End date</p>
+              <input type="date" value={form.end} onChange={e=>setForm(f=>({...f,end:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+            </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
+            <NoteField value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="Scope, context, anything relevant..." rows={2}/>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <Btn variant="primary" onClick={addPhase} style={{opacity:saving?0.6:1}}>{saving?"Saving…":"Add phase"}</Btn>
+            <Btn onClick={()=>setShowAdd(false)}>Cancel</Btn>
+          </div>
+        </div>
+      )}
+
+      <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
+        {phases.length===0&&(
+          <div style={{padding:32,textAlign:"center",color:C.muted,fontSize:13}}>No phases yet. Add your first one above.</div>
+        )}
+        {phases.map((ph,i)=>{
+          const phaseTasks = tasks.filter(t=>t.phase_id===ph.id);
+          const done = phaseTasks.filter(t=>t.status==="complete").length;
+          const spent = expenses.filter(e=>e.phase_id===ph.id).reduce((s,e)=>s+e.amount,0);
+          const pct = ph.budget>0 ? Math.min(100,Math.round((spent/ph.budget)*100)) : 0;
+          return (
+            <div key={ph.id} onClick={()=>onNavigate("phase",ph.id)}
+              style={{display:"flex",alignItems:"center",gap:16,padding:"14px 18px",borderBottom:i<phases.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer",background:C.surface}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.hover}
+              onMouseLeave={e=>e.currentTarget.style.background=C.surface}>
+              <div style={{width:8,height:8,borderRadius:2,background:pc(ph.id),flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:3}}>{ph.name}</p>
+                <p style={{fontSize:11,color:C.muted}}>{fmtD(ph.start)} → {fmtD(ph.end)}</p>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
+                <div style={{textAlign:"right"}}>
+                  <p style={{fontSize:11,color:C.muted,marginBottom:1}}>Tasks</p>
+                  <p style={{fontSize:13,fontWeight:500,color:C.text}}>{done}/{phaseTasks.length}</p>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <p style={{fontSize:11,color:C.muted,marginBottom:1}}>Budget</p>
+                  <p style={{fontSize:13,fontWeight:500,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(ph.budget)}</p>
+                </div>
+                <div style={{width:80}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:10,color:C.muted}}>spent</span>
+                    <span style={{fontSize:10,color:C.muted}}>{pct}%</span>
+                  </div>
+                  <div style={{height:3,background:C.divider,borderRadius:2}}><div style={{height:"100%",width:`${pct}%`,background:pc(ph.id),borderRadius:2}}/></div>
+                </div>
+                <Chip status={ph.status}/>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── LOGIN PAGE ─────────────────────────────────────────────────────────────
 function LoginPage({onLogin}) {
   const [email,setEmail]=useState("");
@@ -1806,7 +1924,7 @@ export default function App() {
   if(!session) return <LoginPage onLogin={handleLogin}/>;
 
   const navigate=(type,phaseId,taskId)=>{
-    if(type==="dashboard"||type==="timeline"||type==="weekly"||type==="tasks"||type==="budget"||type==="events"||type==="settings"){setView(type);setPage(null);return;}
+    if(type==="dashboard"||type==="phases"||type==="timeline"||type==="weekly"||type==="tasks"||type==="budget"||type==="events"||type==="settings"){setView(type);setPage(null);return;}
     if(type==="phase"){setPage({type:"phase",phaseId,taskId:taskId||null});return;}
   };
 
@@ -1849,7 +1967,7 @@ export default function App() {
   const activePhase=showPhasePage?phases.find(p=>p.id===page.phaseId):null;
   const userEmail = session?.user?.email || "";
 
-  const nav=[{id:"dashboard",label:"Overview"},{id:"timeline",label:"Timeline"},{id:"weekly",label:"Weekly"},{id:"tasks",label:"Tasks"},{id:"budget",label:"Budget"},{id:"events",label:"Events"},{id:"settings",label:"Settings"}];
+  const nav=[{id:"dashboard",label:"Overview"},{id:"phases",label:"Phases"},{id:"timeline",label:"Timeline"},{id:"weekly",label:"Weekly"},{id:"tasks",label:"Tasks"},{id:"budget",label:"Budget"},{id:"events",label:"Events"},{id:"settings",label:"Settings"}];
 
   if(loading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
@@ -1895,6 +2013,7 @@ export default function App() {
         {showPhasePage&&activePhase&&<PhasePage phase={activePhase} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdatePhase={updatePhase} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeletePhase={deletePhase}/>}
         {!showPhasePage&&<>
           {view==="dashboard"&&<Dashboard phases={phases} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
+          {view==="phases"   &&<PhasesView phases={phases} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddPhase={p=>setPhases(prev=>[...prev,p])}/>}
           {view==="timeline" &&<TimelineView phases={phases} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="weekly"   &&<WeeklyView phases={phases} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} phases={phases}/>}
