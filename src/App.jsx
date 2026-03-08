@@ -29,12 +29,12 @@ const sbPatch   = (table, id, data) => sbFetch("/rest/v1/"+table+"?id=eq."+id, {
 const sbDel     = (table, id) => sbFetch("/rest/v1/"+table+"?id=eq."+id, {method:"DELETE"});
 
 // DB → app field mappers
-const mapPhase   = p => ({...p, start:p.start_date, end:p.end_date, photos:[]});
+const mapProject   = p => ({...p, start:p.start_date, end:p.end_date, photos:[]});
 const mapTask    = t => ({...t, start:t.start_date, end:t.end_date, photos:[]});
 const mapEvent   = e => ({...e, date:e.event_date, type:e.event_type});
 const mapExpense = e => ({...e, date:e.expense_date});
 const mapQuote   = q => ({
-  id:q.id, phase_id:q.phase_id, awarded_to:q.awarded_to, notes:q.notes,
+  id:q.id, project_id:q.project_id, awarded_to:q.awarded_to, notes:q.notes,
   contractors:(q.quote_contractors_quote_id_fkey||q.quote_contractors||[]).sort((a,b)=>a.sort_order-b.sort_order),
   items:(q.quote_items||[]).sort((a,b)=>a.sort_order-b.sort_order).map(item=>({
     id:item.id, label:item.label,
@@ -65,36 +65,36 @@ const PHASES_SEED = [
 ];
 
 const TASKS_SEED = [
-  {id:1, phase_id:1,title:"Get 3 contractor bids",        start:"2026-02-03",end:"2026-02-10",status:"complete",    assignee:"Eliot",        notes:"Castillo came in lowest at $16,200.",photos:[]},
-  {id:2, phase_id:1,title:"Permit application",           start:"2026-02-10",end:"2026-02-15",status:"complete",    assignee:"Eliot",        notes:"Filed with City of New Orleans.",photos:[]},
-  {id:3, phase_id:1,title:"Unit 1 installation",          start:"2026-02-20",end:"2026-03-01",status:"in_progress", assignee:"Castillo HVAC",notes:"Carrier 3-ton unit. Access through rear.",photos:[]},
-  {id:4, phase_id:1,title:"Unit 2 installation",          start:"2026-03-01",end:"2026-03-15",status:"todo",        assignee:"Castillo HVAC",notes:"Hold until rental unit vacated.",photos:[]},
-  {id:5, phase_id:2,title:"Design finalization",          start:"2026-03-15",end:"2026-03-25",status:"todo",        assignee:"Eliot",        notes:"",photos:[]},
-  {id:6, phase_id:2,title:"Order cabinets",               start:"2026-03-25",end:"2026-04-05",status:"todo",        assignee:"Elysha",       notes:"IKEA SEKTION or semi-custom. Lead time ~6 weeks.",photos:[]},
-  {id:7, phase_id:2,title:"Demo existing kitchen",        start:"2026-04-10",end:"2026-04-22",status:"todo",        assignee:"GC",           notes:"",photos:[]},
-  {id:8, phase_id:2,title:"Cabinet installation",         start:"2026-05-01",end:"2026-05-28",status:"todo",        assignee:"GC",           notes:"",photos:[]},
-  {id:9, phase_id:2,title:"Countertop template + install",start:"2026-06-01",end:"2026-06-16",status:"todo",        assignee:"GC",           notes:"Quartz preferred.",photos:[]},
-  {id:10,phase_id:2,title:"Appliance hookup",             start:"2026-06-20",end:"2026-06-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
-  {id:11,phase_id:3,title:"Tile selection",               start:"2026-05-01",end:"2026-05-10",status:"todo",        assignee:"Elysha",       notes:"",photos:[]},
-  {id:12,phase_id:3,title:"Demo + rough plumbing",        start:"2026-05-15",end:"2026-05-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
-  {id:13,phase_id:3,title:"Tile installation",            start:"2026-06-10",end:"2026-06-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
-  {id:14,phase_id:3,title:"Fixtures + finish",            start:"2026-07-15",end:"2026-07-31",status:"todo",        assignee:"GC",           notes:"",photos:[]},
-  {id:15,phase_id:5,title:"Porch structural assessment",  start:"2026-08-05",end:"2026-08-18",status:"todo",        assignee:"Eliot",        notes:"",photos:[]},
-  {id:16,phase_id:5,title:"Exterior paint",               start:"2026-09-01",end:"2026-09-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
-  {id:17,phase_id:6,title:"Plant selection + layout",     start:"2026-10-01",end:"2026-10-18",status:"todo",        assignee:"Elysha",       notes:"",photos:[]},
-  {id:18,phase_id:6,title:"Irrigation install",           start:"2026-10-20",end:"2026-11-05",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:1, project_id:1,title:"Get 3 contractor bids",        start:"2026-02-03",end:"2026-02-10",status:"complete",    assignee:"Eliot",        notes:"Castillo came in lowest at $16,200.",photos:[]},
+  {id:2, project_id:1,title:"Permit application",           start:"2026-02-10",end:"2026-02-15",status:"complete",    assignee:"Eliot",        notes:"Filed with City of New Orleans.",photos:[]},
+  {id:3, project_id:1,title:"Unit 1 installation",          start:"2026-02-20",end:"2026-03-01",status:"in_progress", assignee:"Castillo HVAC",notes:"Carrier 3-ton unit. Access through rear.",photos:[]},
+  {id:4, project_id:1,title:"Unit 2 installation",          start:"2026-03-01",end:"2026-03-15",status:"todo",        assignee:"Castillo HVAC",notes:"Hold until rental unit vacated.",photos:[]},
+  {id:5, project_id:2,title:"Design finalization",          start:"2026-03-15",end:"2026-03-25",status:"todo",        assignee:"Eliot",        notes:"",photos:[]},
+  {id:6, project_id:2,title:"Order cabinets",               start:"2026-03-25",end:"2026-04-05",status:"todo",        assignee:"Elysha",       notes:"IKEA SEKTION or semi-custom. Lead time ~6 weeks.",photos:[]},
+  {id:7, project_id:2,title:"Demo existing kitchen",        start:"2026-04-10",end:"2026-04-22",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:8, project_id:2,title:"Cabinet installation",         start:"2026-05-01",end:"2026-05-28",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:9, project_id:2,title:"Countertop template + install",start:"2026-06-01",end:"2026-06-16",status:"todo",        assignee:"GC",           notes:"Quartz preferred.",photos:[]},
+  {id:10,project_id:2,title:"Appliance hookup",             start:"2026-06-20",end:"2026-06-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:11,project_id:3,title:"Tile selection",               start:"2026-05-01",end:"2026-05-10",status:"todo",        assignee:"Elysha",       notes:"",photos:[]},
+  {id:12,project_id:3,title:"Demo + rough plumbing",        start:"2026-05-15",end:"2026-05-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:13,project_id:3,title:"Tile installation",            start:"2026-06-10",end:"2026-06-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:14,project_id:3,title:"Fixtures + finish",            start:"2026-07-15",end:"2026-07-31",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:15,project_id:5,title:"Porch structural assessment",  start:"2026-08-05",end:"2026-08-18",status:"todo",        assignee:"Eliot",        notes:"",photos:[]},
+  {id:16,project_id:5,title:"Exterior paint",               start:"2026-09-01",end:"2026-09-30",status:"todo",        assignee:"GC",           notes:"",photos:[]},
+  {id:17,project_id:6,title:"Plant selection + layout",     start:"2026-10-01",end:"2026-10-18",status:"todo",        assignee:"Elysha",       notes:"",photos:[]},
+  {id:18,project_id:6,title:"Irrigation install",           start:"2026-10-20",end:"2026-11-05",status:"todo",        assignee:"GC",           notes:"",photos:[]},
 ];
 
 const EXPENSES_SEED = [
-  {id:1,phase_id:1,category:"Labor",    vendor:"Castillo HVAC",      amount:8500,date:"2026-02-20"},
-  {id:2,phase_id:1,category:"Materials",vendor:"Johnstone Supply",    amount:3200,date:"2026-02-22"},
-  {id:3,phase_id:1,category:"Permits",  vendor:"City of New Orleans", amount:450, date:"2026-02-15"},
+  {id:1,project_id:1,category:"Labor",    vendor:"Castillo HVAC",      amount:8500,date:"2026-02-20"},
+  {id:2,project_id:1,category:"Materials",vendor:"Johnstone Supply",    amount:3200,date:"2026-02-22"},
+  {id:3,project_id:1,category:"Permits",  vendor:"City of New Orleans", amount:450, date:"2026-02-15"},
 ];
 
 // Quote structure: {id, phase_id, contractors:[{id,name,phone,email}], items:[{id,label,amounts:{contractorId:number}}], awarded_to:contractorId|null, notes:""}
 const QUOTES_SEED = [
   {
-    id:1, phase_id:1,
+    id:1, project_id:1,
     awarded_to:1,
     notes:"Awarded to Castillo. Best price, good references.",
     contractors:[
@@ -112,12 +112,12 @@ const QUOTES_SEED = [
 ];
 
 const EVENTS_SEED = [
-  {id:1, date:"2026-03-12",title:"Plumbing rough-in inspection",  type:"inspection", phase_id:1,   notes:"Inspector: Marcus Webb, 504-555-9001. Confirm 48hrs prior.",done:false},
-  {id:2, date:"2026-03-15",title:"Castillo HVAC final walkthrough",type:"walkthrough",phase_id:1,   notes:"Walk both units before sign-off.",done:false},
-  {id:3, date:"2026-04-01",title:"Cabinet delivery",              type:"delivery",   phase_id:2,   notes:"Confirm delivery window the day before.",done:false},
-  {id:4, date:"2026-04-10",title:"Kitchen demo start",            type:"milestone",  phase_id:2,   notes:"",done:false},
-  {id:5, date:"2026-06-15",title:"Countertop template day",       type:"delivery",   phase_id:2,   notes:"Fabricator on-site 9am.",done:false},
-  {id:6, date:"2026-08-01",title:"Structural engineer site visit", type:"inspection", phase_id:5,   notes:"Re: porch load-bearing assessment.",done:false},
+  {id:1, date:"2026-03-12",title:"Plumbing rough-in inspection",  type:"inspection", project_id:1,   notes:"Inspector: Marcus Webb, 504-555-9001. Confirm 48hrs prior.",done:false},
+  {id:2, date:"2026-03-15",title:"Castillo HVAC final walkthrough",type:"walkthrough",project_id:1,   notes:"Walk both units before sign-off.",done:false},
+  {id:3, date:"2026-04-01",title:"Cabinet delivery",              type:"delivery",   project_id:2,   notes:"Confirm delivery window the day before.",done:false},
+  {id:4, date:"2026-04-10",title:"Kitchen demo start",            type:"milestone",  project_id:2,   notes:"",done:false},
+  {id:5, date:"2026-06-15",title:"Countertop template day",       type:"delivery",   project_id:2,   notes:"Fabricator on-site 9am.",done:false},
+  {id:6, date:"2026-08-01",title:"Structural engineer site visit", type:"inspection", project_id:5,   notes:"Re: porch load-bearing assessment.",done:false},
 ];
 
 const TODAY = "2026-03-08";
@@ -397,7 +397,7 @@ function TaskPage({task,phase,onBack,onNavigate,onUpdateTask}) {
       <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,marginBottom:16}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}>
           {[
-            {label:"Phase",value:<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:7,height:7,borderRadius:2,background:pc(phase.id)}}/><span style={{fontSize:13,color:C.text}}>{phase.name}</span></div>},
+            {label:"Project",value:<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:7,height:7,borderRadius:2,background:pc(phase.id)}}/><span style={{fontSize:13,color:C.text}}>{phase.name}</span></div>},
             {label:"Assignee",value:<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name={task.assignee}/><span style={{fontSize:13,color:C.text}}>{task.assignee}</span></div>},
             {label:"Duration",value:<span style={{fontSize:13,color:C.text}}>{daysBetween(task.start,task.end)} days</span>},
           ].map(({label,value},i)=>(
@@ -482,7 +482,7 @@ const callClaude = (messages, systemPrompt, useSearch) => {
 
 const stripFences = s => s.replace(/[\x60]{3}json|[\x60]{3}/g,"").trim();
 
-function AIPanel({phase, phases, tasks, onAddTasks, onAddBudgetItems, compact}) {
+function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}) {
   const [mode, setMode]           = useState("generate");
   const [input, setInput]         = useState("");
   const [loading, setLoading]     = useState(false);
@@ -491,7 +491,7 @@ function AIPanel({phase, phases, tasks, onAddTasks, onAddBudgetItems, compact}) 
   const [selPhaseId, setSelPhaseId] = useState(phase ? phase.id : (phases[0] ? phases[0].id : null));
 
   const activePhase = phase || phases.find(p => p.id === Number(selPhaseId));
-  const phaseTasks  = tasks.filter(t => activePhase && t.phase_id === activePhase.id);
+  const projectTasks  = tasks.filter(t => activePhase && t.project_id === activePhase.id);
 
   const reset = () => { setResult(null); setError(""); setInput(""); };
 
@@ -499,11 +499,11 @@ function AIPanel({phase, phases, tasks, onAddTasks, onAddBudgetItems, compact}) 
     if(!input.trim() || !activePhase) return;
     setLoading(true); setError(""); setResult(null);
     const sys = SYS_GENERATE + "\nToday is " + TODAY + ". Phase runs " + activePhase.start + " to " + activePhase.end + ".";
-    const userMsg = "Phase: " + activePhase.name + "\nScope: " + input + "\nExisting tasks: " + (phaseTasks.map(t=>t.title).join(", ")||"none") + "\nGenerate a task breakdown.";
+    const userMsg = "Phase: " + activePhase.name + "\nScope: " + input + "\nExisting tasks: " + (projectTasks.map(t=>t.title).join(", ")||"none") + "\nGenerate a task breakdown.";
     callClaude([{role:"user", content:userMsg}], sys)
       .then(text => {
         const arr = JSON.parse(stripFences(text));
-        setResult({type:"tasks", data: arr.map((t,i) => ({...t, id:Date.now()+i, phase_id:activePhase.id, photos:[], _selected:true}))});
+        setResult({type:"tasks", data: arr.map((t,i) => ({...t, id:Date.now()+i, project_id:activePhase.id, photos:[], _selected:true}))});
         setLoading(false);
       })
       .catch(() => { setError("Couldn't parse AI response. Try rephrasing the scope."); setLoading(false); });
@@ -512,7 +512,7 @@ function AIPanel({phase, phases, tasks, onAddTasks, onAddBudgetItems, compact}) 
   const runAudit = () => {
     if(!activePhase) return;
     setLoading(true); setError(""); setResult(null);
-    const taskLines = phaseTasks.map(t => "- " + t.title + " (" + t.start + " to " + t.end + ", " + t.assignee + ", " + t.status + ")").join("\n");
+    const taskLines = projectTasks.map(t => "- " + t.title + " (" + t.start + " to " + t.end + ", " + t.assignee + ", " + t.status + ")").join("\n");
     const userMsg = "Project: 4602 Banks St, New Orleans\nPhase: " + activePhase.name + "\nDates: " + activePhase.start + " to " + activePhase.end + "\nBudget: $" + (activePhase.budget||0).toLocaleString() + "\nTasks:\n" + (taskLines||"No tasks yet.") + "\nAudit for conflicts, missing steps, and scheduling issues. Today is " + TODAY + ".";
     callClaude([{role:"user", content:userMsg}], SYS_AUDIT)
       .then(text => {
@@ -598,7 +598,7 @@ function AIPanel({phase, phases, tasks, onAddTasks, onAddBudgetItems, compact}) 
         )}
         {mode==="audit"&&!result&&!loading&&(
           <p style={{fontSize:13, color:C.muted, marginBottom:10, lineHeight:1.5}}>
-            AI will review <strong style={{color:C.text}}>{phaseTasks.length} task{phaseTasks.length!==1?"s":""}</strong> in <strong style={{color:C.text}}>{activePhase ? activePhase.name : "—"}</strong> and flag conflicts, missing steps, and scheduling issues.
+            AI will review <strong style={{color:C.text}}>{projectTasks.length} task{projectTasks.length!==1?"s":""}</strong> in <strong style={{color:C.text}}>{activePhase ? activePhase.name : "—"}</strong> and flag conflicts, missing steps, and scheduling issues.
           </p>
         )}
 
@@ -713,15 +713,16 @@ function AIPanel({phase, phases, tasks, onAddTasks, onAddBudgetItems, compact}) 
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeletePhase}) {
+function ProjectPage({project,tasks,expenses,quotes,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject}) {
+  const phase = project; // alias for minimal churn
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(null);
   const [editing,setEditing]=useState(false);
   const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,budget:phase.budget,start:phase.start,end:phase.end,notes:phase.notes||""});
   const [confirmDelete,setConfirmDelete]=useState(false);
-  const phaseTasks=tasks.filter(t=>t.phase_id===phase.id);
-  const spent=expenses.filter(e=>e.phase_id===phase.id).reduce((s,e)=>s+e.amount,0);
-  const phaseQuote=quotes.find(q=>q.phase_id===phase.id);
+  const projectTasks=tasks.filter(t=>t.project_id===phase.id);
+  const spent=expenses.filter(e=>e.project_id===phase.id).reduce((s,e)=>s+e.amount,0);
+  const projectQuote=quotes.find(q=>q.project_id===phase.id);
 
   if(activeTaskId){
     const t=tasks.find(x=>x.id===activeTaskId);
@@ -730,8 +731,8 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
 
   const saveEdit = () => {
     const updated = {...phase, ...editForm, budget:parseInt(editForm.budget)||0};
-    onUpdatePhase(phase.id, ()=>updated);
-    sbPatch("phases", phase.id, {
+    onUpdateProject(phase.id, ()=>updated);
+    sbPatch("projects", phase.id, {
       name:editForm.name, status:editForm.status, budget:parseInt(editForm.budget)||0,
       start_date:editForm.start, end_date:editForm.end, notes:editForm.notes,
     }).catch(console.error);
@@ -739,7 +740,7 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
   };
 
   const doDelete = () => {
-    onDeletePhase(phase.id);
+    onDeleteProject(phase.id);
     onNavigate("dashboard");
   };
 
@@ -752,7 +753,7 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
       {/* Edit form */}
       {editing&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:20}}>
-          <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>Edit phase</p>
+          <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>Edit project</p>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
@@ -793,9 +794,9 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
               <Btn onClick={()=>setEditing(false)}>Cancel</Btn>
             </div>
             {!confirmDelete
-              ? <Btn variant="danger" onClick={()=>setConfirmDelete(true)}>Delete phase</Btn>
+              ? <Btn variant="danger" onClick={()=>setConfirmDelete(true)}>Delete project</Btn>
               : <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:12,color:"#9E3C3C"}}>Delete phase and all its tasks?</span>
+                  <span style={{fontSize:12,color:"#9E3C3C"}}>Delete project and all its tasks?</span>
                   <Btn variant="danger" onClick={doDelete}>Yes, delete</Btn>
                   <Btn onClick={()=>setConfirmDelete(false)}>Cancel</Btn>
                 </div>
@@ -842,10 +843,10 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
           <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
             <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <p style={{fontSize:13,fontWeight:600,color:C.text}}>Tasks</p>
-              <span style={{fontSize:11,color:C.muted}}>{phaseTasks.filter(t=>t.status==="complete").length}/{phaseTasks.length} done</span>
+              <span style={{fontSize:11,color:C.muted}}>{projectTasks.filter(t=>t.status==="complete").length}/{projectTasks.length} done</span>
             </div>
-            {phaseTasks.map((t,i)=>(
-              <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<phaseTasks.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+            {projectTasks.map((t,i)=>(
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<projectTasks.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
               >
                 <CheckBox done={t.status==="complete"} onClick={e=>{e.stopPropagation();onUpdateTask(t.id,x=>({...x,status:x.status==="complete"?"todo":"complete"}));}}/>
@@ -864,9 +865,9 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
             <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
               <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Assignees</p></div>
               <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
-                {[...new Set(phaseTasks.map(t=>t.assignee))].map(a=>{
-                  const total=phaseTasks.filter(t=>t.assignee===a).length;
-                  const done=phaseTasks.filter(t=>t.assignee===a&&t.status==="complete").length;
+                {[...new Set(projectTasks.map(t=>t.assignee))].map(a=>{
+                  const total=projectTasks.filter(t=>t.assignee===a).length;
+                  const done=projectTasks.filter(t=>t.assignee===a&&t.status==="complete").length;
                   return (
                     <div key={a} style={{display:"flex",alignItems:"center",gap:10}}>
                       <Avatar name={a} size={28}/>
@@ -899,13 +900,13 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
 
       {tab==="quotes"&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20}}>
-          {phaseQuote
-            ? <QuoteComparison quote={phaseQuote} phaseName={phase.name} onUpdate={fn=>onUpdateQuote(phaseQuote.id,fn)}/>
+          {projectQuote
+            ? <QuoteComparison quote={projectQuote} phaseName={phase.name} onUpdate={fn=>onUpdateQuote(projectQuote.id,fn)}/>
             : (
               <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>
                 <p style={{marginBottom:12,fontSize:13}}>No quote comparison yet for this phase.</p>
                 <Btn variant="primary" onClick={()=>{
-                  const newQ={id:uid(),phase_id:phase.id,awarded_to:null,notes:"",contractors:[{id:uid(),name:"Contractor 1",phone:"",email:""}],items:[{id:uid(),label:"Labor",amounts:{}},{id:uid(),label:"Materials",amounts:{}}]};
+                  const newQ={id:uid(),project_id:phase.id,awarded_to:null,notes:"",contractors:[{id:uid(),name:"Contractor 1",phone:"",email:""}],items:[{id:uid(),label:"Labor",amounts:{}},{id:uid(),label:"Materials",amounts:{}}]};
                   onUpdateQuote(null,null,newQ);
                 }}>+ Create quote comparison</Btn>
               </div>
@@ -917,12 +918,12 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
       {tab==="photos"&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:12}}>Phase photos</p>
-          <PhotoGrid photos={phase.photos} onAdd={p=>onUpdatePhase(phase.id,ph=>({...ph,photos:[...ph.photos,p]}))} onRemove={id=>onUpdatePhase(phase.id,ph=>({...ph,photos:ph.photos.filter(p=>p.id!==id)}))}/>
-          {phaseTasks.some(t=>t.photos.length>0)&&(
+          <PhotoGrid photos={phase.photos} onAdd={p=>onUpdateProject(phase.id,ph=>({...ph,photos:[...ph.photos,p]}))} onRemove={id=>onUpdateProject(phase.id,ph=>({...ph,photos:ph.photos.filter(p=>p.id!==id)}))}/>
+          {projectTasks.some(t=>t.photos.length>0)&&(
             <div style={{marginTop:20,paddingTop:16,borderTop:`1px solid ${C.divider}`}}>
               <p style={{fontSize:12,color:C.muted,marginBottom:10}}>From tasks</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                {phaseTasks.flatMap(t=>t.photos.map(p=>({...p,taskTitle:t.title}))).map(p=>(
+                {projectTasks.flatMap(t=>t.photos.map(p=>({...p,taskTitle:t.title}))).map(p=>(
                   <div key={p.id} style={{position:"relative",width:88,height:68,borderRadius:5,overflow:"hidden",border:`1px solid ${C.border}`}}>
                     <img src={p.url} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                     <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.5)",padding:"3px 5px"}}>
@@ -938,7 +939,7 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
 
       {tab==="notes"&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20}}>
-          <NoteField value={phase.notes} onChange={v=>onUpdatePhase(phase.id,ph=>({...ph,notes:v}))} placeholder="Add phase notes..." rows={10}/>
+          <NoteField value={phase.notes} onChange={v=>onUpdateProject(phase.id,ph=>({...ph,notes:v}))} placeholder="Add project notes..." rows={10}/>
         </div>
       )}
 
@@ -957,9 +958,9 @@ function PhasePage({phase,tasks,expenses,quotes,onNavigate,onUpdatePhase,onUpdat
 }
 
 // ── EVENTS VIEW ────────────────────────────────────────────────────────────
-function EventsView({events,setEvents,phases}) {
+function EventsView({events,setEvents,projects}) {
   const [showAdd,setShowAdd]=useState(false);
-  const [form,setForm]=useState({date:"",title:"",type:"inspection",phase_id:"",notes:""});
+  const [form,setForm]=useState({date:"",title:"",type:"inspection",project_id:"",notes:""});
 
   const grouped=useMemo(()=>{
     const sorted=[...events].sort((a,b)=>toMs(a.date)-toMs(b.date));
@@ -977,10 +978,10 @@ function EventsView({events,setEvents,phases}) {
     if(!form.date||!form.title) return;
     const dbEvent = {
       event_date:form.date, title:form.title, event_type:form.type,
-      phase_id:form.phase_id?parseInt(form.phase_id):null,
+      project_id:form.project_id?parseInt(form.project_id):null,
       notes:form.notes, done:false,
     };
-    setForm({date:"",title:"",type:"inspection",phase_id:"",notes:""});
+    setForm({date:"",title:"",type:"inspection",project_id:"",notes:""});
     setShowAdd(false);
     sbInsertRow("events", dbEvent).then(rows=>{
       if(rows?.[0]) setEvents(prev=>[...prev, mapEvent(rows[0])]);
@@ -1030,7 +1031,7 @@ function EventsView({events,setEvents,phases}) {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Phase (optional)</p>
-              <select value={form.phase_id} onChange={e=>setForm(f=>({...f,phase_id:e.target.value}))}
+              <select value={form.project_id} onChange={e=>setForm(f=>({...f,project_id:e.target.value}))}
                 style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
                 <option value="">— No phase —</option>
                 {phases.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1054,7 +1055,7 @@ function EventsView({events,setEvents,phases}) {
           <p style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Coming up</p>
           <div style={{display:"flex",gap:10}}>
             {upcoming.map(ev=>{
-              const ph=phases.find(p=>p.id===ev.phase_id);
+              const ph=phases.find(p=>p.id===ev.project_id);
               const col=eventColor(ev.type);
               return (
                 <div key={ev.id} style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",background:C.surface}}>
@@ -1078,7 +1079,7 @@ function EventsView({events,setEvents,phases}) {
           <p style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>{month}</p>
           <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
             {evs.map((ev,i)=>{
-              const ph=phases.find(p=>p.id===ev.phase_id);
+              const ph=phases.find(p=>p.id===ev.project_id);
               const col=eventColor(ev.type);
               const isPast=toMs(ev.date)<toMs(TODAY)&&!ev.done;
               return (
@@ -1115,7 +1116,7 @@ function EventsView({events,setEvents,phases}) {
 }
 
 // ── DASHBOARD ──────────────────────────────────────────────────────────────
-function Dashboard({phases,tasks,expenses,events,onNavigate}) {
+function Dashboard({projects,tasks,expenses,events,onNavigate}) {
   const spent=expenses.reduce((s,e)=>s+e.amount,0);
   const allocated=phases.reduce((s,p)=>s+p.budget,0);
   const done=tasks.filter(t=>t.status==="complete").length;
@@ -1140,12 +1141,12 @@ function Dashboard({phases,tasks,expenses,events,onNavigate}) {
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
           <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Upcoming tasks</p></div>
           {upcoming.map((t,i)=>{
-            const ph=phases.find(p=>p.id===t.phase_id);
+            const ph=phases.find(p=>p.id===t.project_id);
             return (
-              <div key={t.id} onClick={()=>onNavigate("phase",t.phase_id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:i<upcoming.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+              <div key={t.id} onClick={()=>onNavigate("project",t.project_id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:i<upcoming.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
               >
-                <div style={{width:6,height:6,borderRadius:"50%",background:pc(t.phase_id),flexShrink:0}}/>
+                <div style={{width:6,height:6,borderRadius:"50%",background:pc(t.project_id),flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}>
                   <p style={{fontSize:13,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
                   <p style={{fontSize:11,color:C.muted,marginTop:1}}>{ph?.name}</p>
@@ -1157,11 +1158,11 @@ function Dashboard({phases,tasks,expenses,events,onNavigate}) {
           })}
         </div>
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
-          <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Phases</p></div>
+          <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Projects</p></div>
           {phases.map((ph,i)=>{
-            const s=expenses.filter(e=>e.phase_id===ph.id).reduce((a,e)=>a+e.amount,0);
+            const s=expenses.filter(e=>e.project_id===ph.id).reduce((a,e)=>a+e.amount,0);
             return (
-              <div key={ph.id} onClick={()=>onNavigate("phase",ph.id)} style={{padding:"9px 16px",borderBottom:i<phases.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+              <div key={ph.id} onClick={()=>onNavigate("project",ph.id)} style={{padding:"9px 16px",borderBottom:i<phases.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
               >
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
@@ -1202,7 +1203,7 @@ function Dashboard({phases,tasks,expenses,events,onNavigate}) {
 
 // ── TIMELINE ───────────────────────────────────────────────────────────────
 const LCOL=200;
-function TimelineView({tasks,setTasks,phases,onNavigate}) {
+function TimelineView({tasks,setTasks,projects,onNavigate}) {
   const pS=PROJECT.start,pE=PROJECT.end,projDays=daysBetween(pS,pE);
   const containerRef=useRef(null);
   const [drag,setDrag]=useState(null);
@@ -1261,8 +1262,8 @@ function TimelineView({tasks,setTasks,phases,onNavigate}) {
           const bL=datePct(ph.start,pS,pE),bW=datePct(ph.end,pS,pE)-bL;
           return <div style={{position:"absolute",left:`${bL}%`,width:`${bW}%`,height:6,background:pc(ph.id),borderRadius:3,opacity:0.25,zIndex:1}}/>;
         },
-        onHeaderClick: ()=>onNavigate("phase",ph.id),
-        rows: tasks.filter(t=>t.phase_id===ph.id),
+        onHeaderClick: ()=>onNavigate("project",ph.id),
+        rows: tasks.filter(t=>t.project_id===ph.id),
         taskColor: t=>t.status==="complete"?C.faint:pc(ph.id),
       }));
     }
@@ -1275,7 +1276,7 @@ function TimelineView({tasks,setTasks,phases,onNavigate}) {
         headerExtra: ()=>null,
         onHeaderClick: null,
         rows: tasks.filter(t=>t.assignee===a).sort((x,y)=>toMs(x.start)-toMs(y.start)),
-        taskColor: t=>t.status==="complete"?C.faint:pc(t.phase_id),
+        taskColor: t=>t.status==="complete"?C.faint:pc(t.project_id),
       }));
     }
     // "all" — single flat group, sorted by start
@@ -1286,7 +1287,7 @@ function TimelineView({tasks,setTasks,phases,onNavigate}) {
       headerExtra:()=>null,
       onHeaderClick:null,
       rows:[...tasks].sort((a,b)=>toMs(a.start)-toMs(b.start)),
-      taskColor:t=>t.status==="complete"?C.faint:pc(t.phase_id),
+      taskColor:t=>t.status==="complete"?C.faint:pc(t.project_id),
     }];
   },[groupBy,tasks,phases]);
 
@@ -1303,7 +1304,7 @@ function TimelineView({tasks,setTasks,phases,onNavigate}) {
         {/* Group-by toggle */}
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <span style={{fontSize:11,color:C.muted,fontWeight:500,marginRight:4}}>Group by</span>
-          {[{id:"phase",label:"Phase"},{id:"assignee",label:"Assignee"},{id:"all",label:"All"}].map(opt=>(
+          {[{id:"phase",label:"Project"},{id:"assignee",label:"Assignee"},{id:"all",label:"All"}].map(opt=>(
             <button key={opt.id} onClick={()=>setGroupBy(opt.id)} style={{
               padding:"4px 12px",fontSize:12,fontWeight:500,borderRadius:5,cursor:"pointer",
               border:`1px solid ${groupBy===opt.id?C.accent:C.border}`,
@@ -1369,7 +1370,7 @@ function TimelineView({tasks,setTasks,phases,onNavigate}) {
                     <div style={{width:13,height:13,borderRadius:3,flexShrink:0,border:`1.5px solid ${done?C.accent:C.faint}`,background:done?C.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
                       {done&&<svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
-                    {groupBy!=="phase"&&<div style={{width:6,height:6,borderRadius:"50%",background:pc(t.phase_id),flexShrink:0}}/>}
+                    {groupBy!=="phase"&&<div style={{width:6,height:6,borderRadius:"50%",background:pc(t.project_id),flexShrink:0}}/>}
                     <span style={{fontSize:12,color:done?C.muted:C.text,textDecoration:done?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
                     {groupBy==="phase"&&<Avatar name={t.assignee} size={14}/>}
                   </div>
@@ -1394,7 +1395,7 @@ function TimelineView({tasks,setTasks,phases,onNavigate}) {
 }
 
 // ── WEEKLY ─────────────────────────────────────────────────────────────────
-function WeeklyView({tasks,setTasks,phases,onNavigate}) {
+function WeeklyView({tasks,setTasks,projects,onNavigate}) {
   const[dragId,setDragId]=useState(null);const[overWeek,setOverWeek]=useState(null);
   const grouped=useMemo(()=>{const sorted=[...tasks].sort((a,b)=>toMs(a.end)-toMs(b.end));const weeks={};sorted.forEach(t=>{const d=new Date(t.end+"T12:00:00");const mon=new Date(d);mon.setDate(d.getDate()-((d.getDay()+6)%7));const key=mon.toISOString().split("T")[0];if(!weeks[key])weeks[key]=[];weeks[key].push(t);});return Object.entries(weeks).sort(([a],[b])=>a.localeCompare(b));},[tasks]);
   const onDragStart=(e,id)=>{setDragId(id);const img=new Image();img.src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";e.dataTransfer.setDragImage(img,0,0);};
@@ -1411,9 +1412,9 @@ function WeeklyView({tasks,setTasks,phases,onNavigate}) {
               <div style={{flex:1}}/><span style={{fontSize:11,color:C.muted}}>{wt.length} task{wt.length!==1?"s":""}</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8,paddingLeft:10}}>
-              {wt.map(t=>{const ph=phases.find(p=>p.id===t.phase_id);const done=t.status==="complete";const isMe=dragId===t.id;
+              {wt.map(t=>{const ph=phases.find(p=>p.id===t.project_id);const done=t.status==="complete";const isMe=dragId===t.id;
                 return (
-                  <div key={t.id} draggable onDragStart={e=>onDragStart(e,t.id)} onDragEnd={()=>{setDragId(null);setOverWeek(null);}} onClick={()=>onNavigate("phase",t.phase_id,t.id)}
+                  <div key={t.id} draggable onDragStart={e=>onDragStart(e,t.id)} onDragEnd={()=>{setDragId(null);setOverWeek(null);}} onClick={()=>onNavigate("project",t.project_id,t.id)}
                     style={{background:C.surface,border:`1px solid ${isMe?C.accent:C.border}`,borderRadius:6,padding:"10px 12px",display:"flex",gap:10,alignItems:"flex-start",cursor:"grab",opacity:isMe?0.35:1,transition:"opacity 0.15s,border-color 0.15s"}}
                     onMouseEnter={e=>!dragId&&(e.currentTarget.style.borderColor=C.faint)} onMouseLeave={e=>e.currentTarget.style.borderColor=isMe?C.accent:C.border}
                   >
@@ -1421,7 +1422,7 @@ function WeeklyView({tasks,setTasks,phases,onNavigate}) {
                     <div style={{flex:1,minWidth:0}}>
                       <p style={{fontSize:13,color:done?C.muted:C.text,textDecoration:done?"line-through":"none",lineHeight:1.35,marginBottom:5}}>{t.title}</p>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:C.muted}}><div style={{width:6,height:6,borderRadius:"50%",background:pc(t.phase_id)}}/>{ph?.name}</span>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:C.muted}}><div style={{width:6,height:6,borderRadius:"50%",background:pc(t.project_id)}}/>{ph?.name}</span>
                         <Avatar name={t.assignee}/>
                         {t.photos.length>0&&<span style={{fontSize:11,color:C.muted}}>📷{t.photos.length}</span>}
                       </div>
@@ -1439,7 +1440,7 @@ function WeeklyView({tasks,setTasks,phases,onNavigate}) {
 }
 
 // ── BUDGET ─────────────────────────────────────────────────────────────────
-function BudgetView({phases,expenses,onNavigate}) {
+function BudgetView({projects,expenses,onNavigate}) {
   const totalB=PROJECT.total_budget,allocated=phases.reduce((s,p)=>s+p.budget,0),totalSpent=expenses.reduce((s,e)=>s+e.amount,0);
   return (
     <div style={{padding:"32px 40px"}}>
@@ -1458,12 +1459,12 @@ function BudgetView({phases,expenses,onNavigate}) {
       </div>
       <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 100px 100px 100px 130px 90px",padding:"8px 16px",borderBottom:`1px solid ${C.border}`,background:C.bg}}>
-          {["Phase","Budget","Spent","Remaining","Progress","Status"].map(h=><span key={h} style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</span>)}
+          {["Project","Budget","Spent","Remaining","Progress","Status"].map(h=><span key={h} style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</span>)}
         </div>
-        {phases.map((ph,idx)=>{const phExp=expenses.filter(e=>e.phase_id===ph.id);const spent=phExp.reduce((s,e)=>s+e.amount,0);const pct=Math.min(100,(spent/ph.budget)*100);
+        {phases.map((ph,idx)=>{const phExp=expenses.filter(e=>e.project_id===ph.id);const spent=phExp.reduce((s,e)=>s+e.amount,0);const pct=Math.min(100,(spent/ph.budget)*100);
           return (
             <div key={ph.id}>
-              <div onClick={()=>onNavigate("phase",ph.id)} style={{display:"grid",gridTemplateColumns:"1fr 100px 100px 100px 130px 90px",padding:"11px 16px",borderBottom:`1px solid ${C.divider}`,alignItems:"center",cursor:"pointer",background:C.surface}} onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background=C.surface}>
+              <div onClick={()=>onNavigate("project",ph.id)} style={{display:"grid",gridTemplateColumns:"1fr 100px 100px 100px 130px 90px",padding:"11px 16px",borderBottom:`1px solid ${C.divider}`,alignItems:"center",cursor:"pointer",background:C.surface}} onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background=C.surface}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:2,background:pc(ph.id),flexShrink:0}}/><span style={{fontSize:13,color:C.text,fontWeight:500}}>{ph.name}</span></div>
                 <span style={{fontSize:13,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(ph.budget)}</span>
                 <span style={{fontSize:13,color:spent>0?C.text:C.muted,fontVariantNumeric:"tabular-nums"}}>{spent>0?fmtM(spent):"—"}</span>
@@ -1481,7 +1482,7 @@ function BudgetView({phases,expenses,onNavigate}) {
 }
 
 // ── TASKS GRID ─────────────────────────────────────────────────────────────
-function TasksGrid({tasks, setTasks, phases}) {
+function TasksGrid({tasks, setTasks, projects}) {
   const [groupBy,    setGroupBy]    = useState("phase"); // "phase" | "assignee" | "date"
   const [editingId,  setEditingId]  = useState(null);
   const [editTitle,  setEditTitle]  = useState("");
@@ -1519,7 +1520,7 @@ function TasksGrid({tasks, setTasks, phases}) {
   const commitAdd = (key, defaultPhaseId) => {
     if(!newTitle.trim()) { setAddingTo(null); setNewTitle(""); return; }
     const dbTask = {
-      phase_id: defaultPhaseId||phases[0]?.id||1, title:newTitle.trim(),
+      project_id: defaultPhaseId||phases[0]?.id||1, title:newTitle.trim(),
       assignee:"", start_date:TODAY, end_date:addDays(TODAY,7),
       status:"todo", notes:"", sort_order:0,
     };
@@ -1536,7 +1537,7 @@ function TasksGrid({tasks, setTasks, phases}) {
         key: String(ph.id),
         label: ph.name,
         dot: pc(ph.id),
-        tasks: [...tasks].filter(t=>t.phase_id===ph.id),
+        tasks: [...tasks].filter(t=>t.project_id===ph.id),
         addPhaseId: ph.id,
       }));
     }
@@ -1561,16 +1562,16 @@ function TasksGrid({tasks, setTasks, phases}) {
       {key:"done",     label:"Done",       dot:C.green,   tasks:sorted.filter(t=>t.status==="complete")},
     ].filter(g=>g.tasks.length>0);
     return buckets.map(b=>({...b, addPhaseId:null}));
-  },[tasks, phases, groupBy]);
+  },[tasks, projects, groupBy]);
 
   const totalDone = tasks.filter(t=>t.status==="complete").length;
-  const GROUPS = [{id:"phase",label:"Phase"},{id:"assignee",label:"Assignee"},{id:"date",label:"Due date"}];
+  const GROUPS = [{id:"phase",label:"Project"},{id:"assignee",label:"Assignee"},{id:"date",label:"Due date"}];
 
   // ── Shared task row ───────────────────────────────────────────────────────
   const TaskRow = ({task, showMeta}) => {
     const done = task.status==="complete";
     const isEditing = editingId===task.id;
-    const ph = phases.find(p=>p.id===task.phase_id);
+    const ph = phases.find(p=>p.id===task.project_id);
     return (
       <div
         onMouseEnter={()=>setHovId(task.id)}
@@ -1692,28 +1693,24 @@ function TasksGrid({tasks, setTasks, phases}) {
 }
 
 // ── PHASES VIEW ────────────────────────────────────────────────────────────
-function PhasesView({phases, tasks, expenses, onNavigate, onAddPhase}) {
+// ── PHASES VIEW ──────────────────────────────────────────────────────────────
+function PhasesView({phases, projects, onNavigate, onAddPhase, onAddProject}) {
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({name:"",status:"planning",budget:"",start:"",end:"",notes:""});
+  const [form, setForm] = useState({name:"",notes:""});
   const [saving, setSaving] = useState(false);
 
   const addPhase = () => {
-    if(!form.name||!form.start||!form.end) return;
+    if(!form.name) return;
     setSaving(true);
-    const dbPhase = {
-      name:form.name, status:form.status, budget:parseInt(form.budget)||0,
-      start_date:form.start, end_date:form.end, notes:form.notes,
-      sort_order: phases.length,
-    };
-    sbInsertRow("phases", dbPhase).then(rows=>{
-      if(rows?.[0]) onAddPhase(mapPhase(rows[0]));
-      setForm({name:"",status:"planning",budget:"",start:"",end:"",notes:""});
+    sbInsertRow("phases", {name:form.name, notes:form.notes, sort_order:phases.length}).then(rows=>{
+      if(rows?.[0]) onAddPhase(rows[0]);
+      setForm({name:"",notes:""});
       setShowAdd(false);
     }).catch(console.error).finally(()=>setSaving(false));
   };
 
   return (
-    <div style={{padding:"32px 40px", maxWidth:800}}>
+    <div style={{padding:"32px 40px",maxWidth:800}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Phases</h2>
         <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>+ Add phase</Btn>
@@ -1722,10 +1719,133 @@ function PhasesView({phases, tasks, expenses, onNavigate, onAddPhase}) {
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New phase</p>
+          <div style={{marginBottom:10}}>
+            <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
+            <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. 2026 Renovation, Phase 1"/>
+          </div>
+          <div style={{marginBottom:14}}>
+            <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
+            <NoteField value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="Scope or context..." rows={2}/>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <Btn variant="primary" onClick={addPhase} style={{opacity:saving?0.6:1}}>{saving?"Saving...":"Add phase"}</Btn>
+            <Btn onClick={()=>setShowAdd(false)}>Cancel</Btn>
+          </div>
+        </div>
+      )}
+
+      {phases.length===0&&!showAdd&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:32,textAlign:"center",color:C.muted,fontSize:13,background:C.surface}}>
+          No phases yet. Phases group your projects into broad timelines.
+        </div>
+      )}
+
+      {phases.map(fa=>{
+        const faProjects=projects.filter(p=>p.phase_id===fa.id);
+        const totalBudget=faProjects.reduce((s,p)=>s+p.budget,0);
+        return(
+          <div key={fa.id} style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface,marginBottom:16}}>
+            <div style={{padding:"14px 18px",borderBottom:faProjects.length>0?`1px solid ${C.divider}`:"none",display:"flex",alignItems:"center",justifyContent:"space-between",background:C.bg}}>
+              <div>
+                <p style={{fontSize:15,fontWeight:700,color:C.text}}>{fa.name}</p>
+                {fa.notes&&<p style={{fontSize:12,color:C.muted,marginTop:2}}>{fa.notes}</p>}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:12,color:C.muted}}>{faProjects.length} project{faProjects.length!==1?"s":""} · {fmtM(totalBudget)} total</span>
+                <Btn onClick={()=>onNavigate("projects")} style={{fontSize:11}}>+ Add project</Btn>
+              </div>
+            </div>
+            {faProjects.map((pr,i)=>(
+              <div key={pr.id} onClick={()=>onNavigate("project",pr.id)}
+                style={{display:"flex",alignItems:"center",gap:14,padding:"12px 18px",borderBottom:i<faProjects.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.hover}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{width:7,height:7,borderRadius:2,background:pc(pr.id),flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <p style={{fontSize:13,fontWeight:500,color:C.text}}>{pr.name}</p>
+                  <p style={{fontSize:11,color:C.muted,marginTop:1}}>{fmtD(pr.start)} → {fmtD(pr.end)}</p>
+                </div>
+                <Chip status={pr.status}/>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProjectsView({phases, projects, tasks, expenses, onNavigate, onAddProject}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({name:"",status:"planning",budget:"",start:"",end:"",notes:"",phase_id:""});
+  const [saving, setSaving] = useState(false);
+
+  const addProject = () => {
+    if(!form.name||!form.start||!form.end) return;
+    setSaving(true);
+    const dbProject = {
+      name:form.name, status:form.status, budget:parseInt(form.budget)||0,
+      start_date:form.start, end_date:form.end, notes:form.notes,
+      phase_id:parseInt(form.phase_id)||null, sort_order:projects.length,
+    };
+    sbInsertRow("projects", dbProject).then(rows=>{
+      if(rows?.[0]) onAddProject(mapProject(rows[0]));
+      setForm({name:"",status:"planning",budget:"",start:"",end:"",notes:"",phase_id:""});
+      setShowAdd(false);
+    }).catch(console.error).finally(()=>setSaving(false));
+  };
+
+  // Group projects: those with a phase go under their phase, ungrouped ones at bottom
+  const grouped = phases.map(fa=>({fa, items:projects.filter(p=>String(p.phase_id)===String(fa.id))}));
+  const ungrouped = projects.filter(p=>!p.phase_id||!phases.find(fa=>String(fa.id)===String(p.phase_id)));
+
+  const ProjectRow = ({pr, i, total}) => {
+    const projectTasks=tasks.filter(t=>t.project_id===pr.id);
+    const done=projectTasks.filter(t=>t.status==="complete").length;
+    const spent=expenses.filter(e=>e.project_id===pr.id).reduce((s,e)=>s+e.amount,0);
+    return(
+      <div onClick={()=>onNavigate("project",pr.id)}
+        style={{display:"flex",alignItems:"center",gap:14,padding:"12px 18px",borderBottom:i<total-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+        onMouseEnter={e=>e.currentTarget.style.background=C.hover}
+        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+        <div style={{width:7,height:7,borderRadius:2,background:pc(pr.id),flexShrink:0}}/>
+        <div style={{flex:1,minWidth:0}}>
+          <p style={{fontSize:13,fontWeight:500,color:C.text}}>{pr.name}</p>
+          <p style={{fontSize:11,color:C.muted,marginTop:1}}>{fmtD(pr.start)} → {fmtD(pr.end)}</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <span style={{fontSize:12,color:C.muted}}>{done}/{projectTasks.length} tasks</span>
+          <span style={{fontSize:12,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(pr.budget)}</span>
+          <Chip status={pr.status}/>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{padding:"32px 40px",maxWidth:800}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
+        <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Projects</h2>
+        <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>+ Add project</Btn>
+      </div>
+
+      {showAdd&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
+          <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New project</p>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div style={{gridColumn:"1/-1"}}>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
-              <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. Roof, Flooring, Electrical"/>
+              <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. HVAC, Kitchen, Exterior"/>
+            </div>
+            <div>
+              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Phase</p>
+              <select value={form.phase_id} onChange={e=>setForm(f=>({...f,phase_id:e.target.value}))}
+                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
+                <option value="">No phase</option>
+                {phases.map(fa=><option key={fa.id} value={fa.id}>{fa.name}</option>)}
+              </select>
             </div>
             <div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Status</p>
@@ -1754,57 +1874,38 @@ function PhasesView({phases, tasks, expenses, onNavigate, onAddPhase}) {
           </div>
           <div style={{marginBottom:14}}>
             <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
-            <NoteField value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="Scope, context, anything relevant..." rows={2}/>
+            <NoteField value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="Scope, context..." rows={2}/>
           </div>
           <div style={{display:"flex",gap:8}}>
-            <Btn variant="primary" onClick={addPhase} style={{opacity:saving?0.6:1}}>{saving?"Saving…":"Add phase"}</Btn>
+            <Btn variant="primary" onClick={addProject} style={{opacity:saving?0.6:1}}>{saving?"Saving...":"Add project"}</Btn>
             <Btn onClick={()=>setShowAdd(false)}>Cancel</Btn>
           </div>
         </div>
       )}
 
-      <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
-        {phases.length===0&&(
-          <div style={{padding:32,textAlign:"center",color:C.muted,fontSize:13}}>No phases yet. Add your first one above.</div>
-        )}
-        {phases.map((ph,i)=>{
-          const phaseTasks = tasks.filter(t=>t.phase_id===ph.id);
-          const done = phaseTasks.filter(t=>t.status==="complete").length;
-          const spent = expenses.filter(e=>e.phase_id===ph.id).reduce((s,e)=>s+e.amount,0);
-          const pct = ph.budget>0 ? Math.min(100,Math.round((spent/ph.budget)*100)) : 0;
-          return (
-            <div key={ph.id} onClick={()=>onNavigate("phase",ph.id)}
-              style={{display:"flex",alignItems:"center",gap:16,padding:"14px 18px",borderBottom:i<phases.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer",background:C.surface}}
-              onMouseEnter={e=>e.currentTarget.style.background=C.hover}
-              onMouseLeave={e=>e.currentTarget.style.background=C.surface}>
-              <div style={{width:8,height:8,borderRadius:2,background:pc(ph.id),flexShrink:0}}/>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:3}}>{ph.name}</p>
-                <p style={{fontSize:11,color:C.muted}}>{fmtD(ph.start)} → {fmtD(ph.end)}</p>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
-                <div style={{textAlign:"right"}}>
-                  <p style={{fontSize:11,color:C.muted,marginBottom:1}}>Tasks</p>
-                  <p style={{fontSize:13,fontWeight:500,color:C.text}}>{done}/{phaseTasks.length}</p>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <p style={{fontSize:11,color:C.muted,marginBottom:1}}>Budget</p>
-                  <p style={{fontSize:13,fontWeight:500,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(ph.budget)}</p>
-                </div>
-                <div style={{width:80}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                    <span style={{fontSize:10,color:C.muted}}>spent</span>
-                    <span style={{fontSize:10,color:C.muted}}>{pct}%</span>
-                  </div>
-                  <div style={{height:3,background:C.divider,borderRadius:2}}><div style={{height:"100%",width:`${pct}%`,background:pc(ph.id),borderRadius:2}}/></div>
-                </div>
-                <Chip status={ph.status}/>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {projects.length===0&&!showAdd&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:32,textAlign:"center",color:C.muted,fontSize:13,background:C.surface}}>
+          No projects yet. Add your first one above.
+        </div>
+      )}
+
+      {grouped.map(({fa,items})=>items.length>0&&(
+        <div key={fa.id} style={{marginBottom:20}}>
+          <p style={{fontSize:10,fontWeight:600,color:C.faint,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8,paddingLeft:2}}>{fa.name}</p>
+          <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
+            {items.map((pr,i)=><ProjectRow key={pr.id} pr={pr} i={i} total={items.length}/>)}
+          </div>
+        </div>
+      ))}
+
+      {ungrouped.length>0&&(
+        <div style={{marginBottom:20}}>
+          {grouped.some(({items})=>items.length>0)&&<p style={{fontSize:10,fontWeight:600,color:C.faint,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8,paddingLeft:2}}>Unassigned</p>}
+          <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
+            {ungrouped.map((pr,i)=><ProjectRow key={pr.id} pr={pr} i={i} total={ungrouped.length}/>)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1862,7 +1963,8 @@ export default function App() {
   const [session,   setSession]   = useState(null);
   const [loading,   setLoading]   = useState(false);
   const [view,      setView]      = useState("dashboard");
-  const [phases,    setPhases]    = useState([]);
+  const [phases,    setPhases]     = useState([]);
+  const [projects,  setProjects]    = useState([]);
   const [tasks,     setTasks]     = useState([]);
   const [expenses,  setExpenses]  = useState([]);
   const [events,    setEvents]    = useState([]);
@@ -1873,13 +1975,15 @@ export default function App() {
   const loadData = useCallback(() => {
     setLoading(true);
     Promise.all([
-      sbQ("phases",   "select=*&order=sort_order.asc"),
+      sbQ("phases",     "select=*&order=sort_order.asc"),
+      sbQ("projects",   "select=*&order=sort_order.asc"),
       sbQ("tasks",    "select=*&order=sort_order.asc"),
       sbQ("expenses", "select=*"),
       sbQ("events",   "select=*&order=event_date.asc"),
       sbFetch("/rest/v1/quotes?select=*,quote_contractors!quote_contractors_quote_id_fkey(*),quote_items(*,quote_item_amounts(*))"),
-    ]).then(([ph,ta,ex,ev,qu])=>{
-      setPhases(ph.map(mapPhase));
+    ]).then(([fa,ph,ta,ex,ev,qu])=>{
+      setPhases(fa.map(f=>({...f})));
+      setProjects(ph.map(mapProject));
       setTasks(ta.map(mapTask));
       setExpenses(ex.map(mapExpense));
       setEvents(ev.map(mapEvent));
@@ -1899,7 +2003,7 @@ export default function App() {
     AUTH_TOKEN = null;
     localStorage.removeItem("4602banks_session");
     setSession(null);
-    setPhases([]); setTasks([]); setExpenses([]); setEvents([]); setQuotes([]);
+    setPhases([]); setProjects([]); setTasks([]); setExpenses([]); setEvents([]); setQuotes([]);
   };
 
   // Restore session on mount
@@ -1923,27 +2027,27 @@ export default function App() {
 
   if(!session) return <LoginPage onLogin={handleLogin}/>;
 
-  const navigate=(type,phaseId,taskId)=>{
-    if(type==="dashboard"||type==="phases"||type==="timeline"||type==="weekly"||type==="tasks"||type==="budget"||type==="events"||type==="settings"){setView(type);setPage(null);return;}
-    if(type==="phase"){setPage({type:"phase",phaseId,taskId:taskId||null});return;}
+  const navigate=(type,projectId,taskId)=>{
+    if(type==="dashboard"||type==="phases"||type==="projects"||type==="timeline"||type==="weekly"||type==="tasks"||type==="budget"||type==="events"||type==="settings"){setView(type);setPage(null);return;}
+    if(type==="project"){setPage({type:"project",projectId,taskId:taskId||null});return;}
   };
 
-  const updatePhase=(id,fn)=>setPhases(prev=>prev.map(p=>p.id===id?fn(p):p));
+  const updateProject=(id,fn)=>setProjects(prev=>prev.map(p=>p.id===id?fn(p):p));
   const updateTask=(id,fn)=>setTasks(prev=>prev.map(t=>t.id===id?fn(t):t));
   const updateQuote=(id,fn,newQuote)=>{
     if(newQuote){setQuotes(prev=>[...prev,newQuote]);return;}
     setQuotes(prev=>prev.map(q=>q.id===id?fn(q):q));
   };
 
-  const deletePhase = id => {
-    setPhases(prev=>prev.filter(p=>p.id!==id));
-    setTasks(prev=>prev.filter(t=>t.phase_id!==id));
-    sbDel("phases", id).catch(console.error);
+  const deleteProject = id => {
+    setProjects(prev=>prev.filter(p=>p.id!==id));
+    setTasks(prev=>prev.filter(t=>t.project_id!==id));
+    sbDel("projects", id).catch(console.error);
   };
 
   const addTasks = newTasks => {
     const dbTasks = newTasks.map(t=>({
-      phase_id:t.phase_id, title:t.title, assignee:t.assignee||"",
+      project_id:t.project_id, title:t.title, assignee:t.assignee||"",
       start_date:t.start||TODAY, end_date:t.end||addDays(TODAY,7),
       status:"todo", notes:t.notes||"", sort_order:0,
     }));
@@ -1955,7 +2059,7 @@ export default function App() {
 
   const addBudgetItems = (items, phaseId) => {
     const dbItems = items.map(item=>({
-      phase_id:phaseId, category:"Materials", vendor:"Est. (AI)",
+      project_id:projectId, category:"Materials", vendor:"Est. (AI)",
       amount:Math.round((item.low+item.high)/2), expense_date:TODAY,
       notes:item.label||"", is_estimate:true,
     }));
@@ -1965,11 +2069,11 @@ export default function App() {
     }).catch(console.error);
   };
 
-  const showPhasePage=page?.type==="phase";
-  const activePhase=showPhasePage?phases.find(p=>p.id===page.phaseId):null;
+  const showProjectPage=page?.type==="project";
+  const activeProject=showProjectPage?projects.find(p=>p.id===page.projectId):null;
   const userEmail = session?.user?.email || "";
 
-  const nav=[{id:"dashboard",label:"Overview"},{id:"phases",label:"Phases"},{id:"timeline",label:"Timeline"},{id:"weekly",label:"Weekly"},{id:"tasks",label:"Tasks"},{id:"budget",label:"Budget"},{id:"events",label:"Events"},{id:"settings",label:"Settings"}];
+  const nav=[{id:"dashboard",label:"Overview"},{id:"phases",label:"Phases"},{id:"projects",label:"Projects"},{id:"timeline",label:"Timeline"},{id:"weekly",label:"Weekly"},{id:"tasks",label:"Tasks"},{id:"budget",label:"Budget"},{id:"events",label:"Events"},{id:"settings",label:"Settings"}];
 
   if(loading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
@@ -1989,18 +2093,25 @@ export default function App() {
         </div>
         <div style={{height:1,background:C.divider,margin:"0 10px 10px"}}/>
         <nav style={{flex:1,overflowY:"auto"}}>
-          {nav.map(item=>{const active=view===item.id&&!showPhasePage;return(
+          {nav.map(item=>{const active=view===item.id&&!showProjectPage;return(
             <button key={item.id} onClick={()=>{setView(item.id);setPage(null);}} style={{display:"flex",alignItems:"center",width:"100%",padding:"7px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:13,fontWeight:active?500:400,textAlign:"left",transition:"background 0.1s"}}>
               {item.label}
             </button>
           );})}
           <div style={{height:1,background:C.divider,margin:"10px 2px"}}/>
-          <p style={{fontSize:10,fontWeight:600,color:C.faint,textTransform:"uppercase",letterSpacing:"0.08em",padding:"0 10px",marginBottom:6}}>Phases</p>
-          {phases.map(ph=>{const active=showPhasePage&&page.phaseId===ph.id;return(
-            <button key={ph.id} onClick={()=>navigate("phase",ph.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:12,textAlign:"left",transition:"background 0.1s"}}>
-              <div style={{width:6,height:6,borderRadius:2,background:pc(ph.id),flexShrink:0}}/>{ph.name}
-            </button>
-          );})}
+          {phases.map((fa,fi)=>{
+            const faProjects=projects.filter(p=>p.phase_id===fa.id);
+            return(
+              <div key={fa.id}>
+                <p style={{fontSize:10,fontWeight:600,color:C.faint,textTransform:"uppercase",letterSpacing:"0.08em",padding:"4px 10px 4px",marginTop:fi>0?8:0}}>{fa.name}</p>
+                {faProjects.map(pr=>{const active=showProjectPage&&page.projectId===pr.id;return(
+                  <button key={pr.id} onClick={()=>navigate("project",pr.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:12,textAlign:"left",transition:"background 0.1s"}}>
+                    <div style={{width:6,height:6,borderRadius:2,background:pc(pr.id),flexShrink:0}}/>{pr.name}
+                  </button>
+                );})}
+              </div>
+            );
+          })}
         </nav>
         <div style={{padding:"10px",borderTop:`1px solid ${C.divider}`,marginTop:8}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
@@ -2012,15 +2123,16 @@ export default function App() {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showPhasePage&&activePhase&&<PhasePage phase={activePhase} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdatePhase={updatePhase} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeletePhase={deletePhase}/>}
-        {!showPhasePage&&<>
-          {view==="dashboard"&&<Dashboard phases={phases} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
-          {view==="phases"   &&<PhasesView phases={phases} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddPhase={p=>setPhases(prev=>[...prev,p])}/>}
-          {view==="timeline" &&<TimelineView phases={phases} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
-          {view==="weekly"   &&<WeeklyView phases={phases} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
-          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} phases={phases}/>}
-          {view==="budget"   &&<BudgetView phases={phases} expenses={expenses} onNavigate={navigate}/>}
-          {view==="events"   &&<EventsView events={events} setEvents={setEvents} phases={phases}/>}
+        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject}/>}
+        {!showProjectPage&&<>
+          {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onAddProject={p=>setProjects(prev=>[...prev,p])}/> }
+          {view==="dashboard"&&<Dashboard projects={projects} tasks={tasks} expenses={expenses} events={events} onNavigate={navigate}/>}
+          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
+          {view==="timeline" &&<TimelineView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
+          {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
+          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects}/>}
+          {view==="budget"   &&<BudgetView projects={projects} expenses={expenses} onNavigate={navigate}/>}
+          {view==="events"   &&<EventsView events={events} setEvents={setEvents} projects={projects}/>}
           {view==="settings" &&(
             <div style={{padding:"32px 40px",maxWidth:500}}>
               <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px",marginBottom:20}}>Settings</h2>
@@ -2072,7 +2184,7 @@ export default function App() {
             <div style={{padding:16}}>
               <AIPanel
                 phase={null}
-                phases={phases}
+                projects={projects}
                 tasks={tasks}
                 onAddTasks={addTasks}
                 onAddBudgetItems={addBudgetItems}
