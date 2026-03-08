@@ -582,7 +582,7 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
           <div style={{marginBottom:12}}>
             <select value={selPhaseId||""} onChange={e=>setSelPhaseId(Number(e.target.value))}
               style={{width:"100%", border:"1px solid "+C.border, borderRadius:5, padding:"7px 10px", fontSize:13, color:C.text, background:C.bg, cursor:"pointer"}}>
-              {phases.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
         )}
@@ -1034,7 +1034,7 @@ function EventsView({events,setEvents,projects}) {
               <select value={form.project_id} onChange={e=>setForm(f=>({...f,project_id:e.target.value}))}
                 style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
                 <option value="">— No phase —</option>
-                {phases.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           </div>
@@ -1159,7 +1159,7 @@ function Dashboard({projects,tasks,expenses,events,onNavigate}) {
         </div>
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
           <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Projects</p></div>
-          {phases.map((ph,i)=>{
+          {projects.map((ph,i)=>{
             const s=expenses.filter(e=>e.project_id===ph.id).reduce((a,e)=>a+e.amount,0);
             return (
               <div key={ph.id} onClick={()=>onNavigate("project",ph.id)} style={{padding:"9px 16px",borderBottom:i<projects.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
@@ -1461,7 +1461,7 @@ function BudgetView({projects,expenses,onNavigate}) {
         <div style={{display:"grid",gridTemplateColumns:"1fr 100px 100px 100px 130px 90px",padding:"8px 16px",borderBottom:`1px solid ${C.border}`,background:C.bg}}>
           {["Project","Budget","Spent","Remaining","Progress","Status"].map(h=><span key={h} style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</span>)}
         </div>
-        {phases.map((ph,idx)=>{const phExp=expenses.filter(e=>e.project_id===ph.id);const spent=phExp.reduce((s,e)=>s+e.amount,0);const pct=Math.min(100,(spent/ph.budget)*100);
+        {projects.map((ph,idx)=>{const phExp=expenses.filter(e=>e.project_id===ph.id);const spent=phExp.reduce((s,e)=>s+e.amount,0);const pct=Math.min(100,(spent/ph.budget)*100);
           return (
             <div key={ph.id}>
               <div onClick={()=>onNavigate("project",ph.id)} style={{display:"grid",gridTemplateColumns:"1fr 100px 100px 100px 130px 90px",padding:"11px 16px",borderBottom:`1px solid ${C.divider}`,alignItems:"center",cursor:"pointer",background:C.surface}} onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background=C.surface}>
