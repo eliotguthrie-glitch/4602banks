@@ -34,7 +34,7 @@ const mapTask    = t => ({...t, start:t.start_date, end:t.end_date, photos:[]});
 const mapEvent   = e => ({...e, date:e.event_date, type:e.event_type, time:e.event_time||""});
 const mapExpense = e => ({...e, date:e.expense_date});
 const mapQuote   = q => ({
-  id:q.id, project_id:q.project_id, awarded_to:q.awarded_to, notes:q.notes,
+  id:q.id, project_id:q.project_id, task_id:q.task_id||null, awarded_to:q.awarded_to, notes:q.notes,
   contractors:(q.quote_contractors_quote_id_fkey||q.quote_contractors||[]).sort((a,b)=>a.sort_order-b.sort_order),
   items:(q.quote_items||[]).sort((a,b)=>a.sort_order-b.sort_order).map(item=>({
     id:item.id, label:item.label,
@@ -228,7 +228,7 @@ function Btn({onClick,children,variant="default",style={}}) {
 }
 
 // ── QUOTE COMPARISON ───────────────────────────────────────────────────────
-function QuoteComparison({quote,onUpdate,phaseName}) {
+function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
   const totals = useMemo(()=>{
     const t={};
     quote.contractors.forEach(c=>{t[c.id]=quote.items.reduce((s,item)=>s+(item.amounts[c.id]||0),0);});
@@ -260,7 +260,12 @@ function QuoteComparison({quote,onUpdate,phaseName}) {
   };
   const removeItem=id=>updQ(q=>({...q,items:q.items.filter(i=>i.id!==id)}));
   const updateItemLabel=(id,val)=>updQ(q=>({...q,items:q.items.map(i=>i.id===id?{...i,label:val}:i)}));
-  const award=id=>updQ(q=>({...q,awarded_to:q.awarded_to===id?null:id}));
+  const award=id=>{
+    const isUnawarding = id===null||quote.awarded_to===id;
+    const newAwarded = isUnawarding?null:id;
+    updQ(q=>({...q,awarded_to:newAwarded}));
+    if(onAward) onAward(isUnawarding?null:(totals[id]||0));
+  };
 
   const colW = 130;
 
@@ -418,8 +423,9 @@ function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask}) {
   );
 }
 
-function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onAddEvent,team}) {
+function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddTask,onUpdateQuote,onAddEvent,team}) {
   const [addedToCalendar, setAddedToCalendar] = useState(false);
+  const [taskTab, setTaskTab] = useState("detail"); // "detail" | "quotes"
   const convertToEvent = () => {
     const ev = {
       title: task.title,
@@ -434,8 +440,15 @@ function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onA
       setAddedToCalendar(true);
     }).catch(console.error);
   };
+  const taskQuote = (quotes||[]).find(q=>q.task_id===task.id);
+  const taskQuoteTotals = taskQuote ? (() => {
+    const t={};
+    taskQuote.contractors.forEach(c=>{t[c.id]=taskQuote.items.reduce((s,item)=>s+(item.amounts[c.id]||0),0);});
+    return t;
+  })() : {};
+
   return (
-    <div style={{padding:"32px 40px",maxWidth:760}}>
+    <div style={{padding:"32px 40px",maxWidth:820}}>
       <Breadcrumb crumbs={[{label:"Overview",onClick:()=>onNavigate("dashboard")},{label:phase.name,onClick:onBack},{label:task.title}]}/>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:24}}>
         <div>
@@ -459,6 +472,19 @@ function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onA
         </div>
       </div>
 
+      {/* Tab nav */}
+      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:20}}>
+        {[{id:"detail",label:"Detail"},{id:"quotes",label:"Quotes"+(taskQuote?" ✓":"")}].map(t=>(
+          <button key={t.id} onClick={()=>setTaskTab(t.id)} style={{
+            padding:"8px 16px",fontSize:13,fontWeight:taskTab===t.id?600:400,
+            color:taskTab===t.id?C.text:C.muted,background:"none",border:"none",
+            borderBottom:taskTab===t.id?`2px solid ${C.text}`:"2px solid transparent",
+            cursor:"pointer",marginBottom:-1,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {taskTab==="detail"&&<>
       <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,marginBottom:16}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr"}}>
           {[
@@ -510,7 +536,7 @@ function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onA
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
           <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Notes</p></div>
           <div style={{padding:"12px 16px"}}>
-            <NoteField value={task.notes} onChange={v=>onUpdateTask(task.id,t=>({...t,notes:v}))} placeholder="Add task notes..."/>
+            <NoteField value={task.notes||""} onChange={v=>onUpdateTask(task.id,t=>({...t,notes:v}))} placeholder="Add task notes..."/>
           </div>
         </div>
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}>
@@ -525,6 +551,36 @@ function TaskPage({task,phase,tasks,onBack,onNavigate,onUpdateTask,onAddTask,onA
           </div>
         </div>
       </div>
+      </>}
+
+      {taskTab==="quotes"&&(
+        <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20}}>
+          {taskQuote ? (
+            <QuoteComparison
+              quote={taskQuote}
+              phaseName={task.title}
+              onUpdate={fn=>onUpdateQuote(taskQuote.id,fn)}
+              onAward={total=>{
+                if(total!==null){
+                  onUpdateTask(task.id,t=>({...t,price:total}));
+                  sbPatch("tasks",task.id,{price:total}).catch(console.error);
+                }
+              }}
+            />
+          ) : (
+            <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>
+              <p style={{fontSize:13,marginBottom:4}}>No quote comparison for this task.</p>
+              <p style={{fontSize:12,color:C.faint,marginBottom:16}}>Compare bids from multiple contractors side by side.</p>
+              <Btn variant="primary" onClick={()=>{
+                const newQ={id:uid(),project_id:task.project_id,task_id:task.id,awarded_to:null,notes:"",
+                  contractors:[{id:uid(),name:"Contractor 1",phone:"",email:"",sort_order:0}],
+                  items:[{id:uid(),label:"Labor",amounts:{}},{id:uid(),label:"Materials",amounts:{}}]};
+                onUpdateQuote(null,null,newQ);
+              }}>+ Add quote comparison</Btn>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -834,7 +890,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
 
   if(activeTaskId){
     const t=tasks.find(x=>x.id===activeTaskId);
-    if(t) return <TaskPage task={t} phase={phase} tasks={tasks} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddTask={t=>onAddTasks([t])} onAddEvent={onAddEvent} team={team}/>;
+    if(t) return <TaskPage task={t} phase={phase} tasks={tasks} quotes={quotes} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddTask={t=>onAddTasks([t])} onUpdateQuote={onUpdateQuote} onAddEvent={onAddEvent} team={team}/>;
   }
 
   const saveEdit = () => {
@@ -1072,19 +1128,44 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
       )}
 
       {tab==="quotes"&&(
-        <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20}}>
-          {projectQuote
-            ? <QuoteComparison quote={projectQuote} phaseName={phase.name} onUpdate={fn=>onUpdateQuote(projectQuote.id,fn)}/>
-            : (
-              <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>
-                <p style={{marginBottom:12,fontSize:13}}>No quote comparison yet for this phase.</p>
-                <Btn variant="primary" onClick={()=>{
-                  const newQ={id:uid(),project_id:phase.id,awarded_to:null,notes:"",contractors:[{id:uid(),name:"Contractor 1",phone:"",email:""}],items:[{id:uid(),label:"Labor",amounts:{}},{id:uid(),label:"Materials",amounts:{}}]};
-                  onUpdateQuote(null,null,newQ);
-                }}>+ Create quote comparison</Btn>
+        <div>
+          {projectTasks.filter(t=>!t.parent_task_id).length===0&&(
+            <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:40,textAlign:"center",color:C.muted,fontSize:13}}>Add tasks first, then attach quotes to individual tasks.</div>
+          )}
+          {projectTasks.filter(t=>!t.parent_task_id).map(t=>{
+            const tq=(quotes||[]).find(q=>q.task_id===t.id);
+            return (
+              <div key={t.id} style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:tq?16:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13,fontWeight:600,color:C.text}}>{t.title}</span>
+                    {tq?.awarded_to&&(()=>{
+                      const c=tq.contractors.find(x=>x.id===tq.awarded_to);
+                      const total=tq.items.reduce((s,item)=>s+(item.amounts[tq.awarded_to]||0),0);
+                      return c?<span style={{fontSize:11,color:C.green,background:C.greenBg,padding:"2px 8px",borderRadius:4,fontWeight:500}}>✓ Awarded {c.name} · {fmtM(total)}</span>:null;
+                    })()}
+                  </div>
+                  {!tq&&<Btn onClick={()=>{
+                    const newQ={id:uid(),project_id:phase.id,task_id:t.id,awarded_to:null,notes:"",
+                      contractors:[{id:uid(),name:"Contractor 1",phone:"",email:"",sort_order:0}],
+                      items:[{id:uid(),label:"Labor",amounts:{}},{id:uid(),label:"Materials",amounts:{}}]};
+                    onUpdateQuote(null,null,newQ);
+                  }}>+ Add quotes</Btn>}
+                </div>
+                {tq&&<QuoteComparison
+                  quote={tq}
+                  phaseName={t.title}
+                  onUpdate={fn=>onUpdateQuote(tq.id,fn)}
+                  onAward={total=>{
+                    if(total!==null){
+                      onUpdateTask(t.id,tk=>({...tk,price:total}));
+                      sbPatch("tasks",t.id,{price:total}).catch(console.error);
+                    }
+                  }}
+                />}
               </div>
-            )
-          }
+            );
+          })}
         </div>
       )}
 
@@ -2421,7 +2502,31 @@ export default function App() {
   const updateProject=(id,fn)=>setProjects(prev=>prev.map(p=>p.id===id?fn(p):p));
   const updateTask=(id,fn)=>setTasks(prev=>prev.map(t=>t.id===id?fn(t):t));
   const updateQuote=(id,fn,newQuote)=>{
-    if(newQuote){setQuotes(prev=>[...prev,newQuote]);return;}
+    if(newQuote){
+      // Persist new quote to DB
+      sbInsertRow("quotes",{project_id:newQuote.project_id,task_id:newQuote.task_id||null,awarded_to:null,notes:""}).then(rows=>{
+        if(!rows?.[0]) return;
+        const dbId=rows[0].id;
+        const q={...newQuote,id:dbId};
+        setQuotes(prev=>[...prev,q]);
+        // Insert contractors
+        const cInserts=newQuote.contractors.map((c,i)=>sbInsertRow("quote_contractors",{quote_id:dbId,name:c.name,phone:c.phone||"",email:c.email||"",sort_order:i}).then(cr=>[c.id,cr?.[0]?.id]));
+        Promise.all(cInserts).then(idMap=>{
+          const cIdMap=Object.fromEntries(idMap.filter(Boolean));
+          newQuote.items.forEach((item,i)=>{
+            sbInsertRow("quote_items",{quote_id:dbId,label:item.label,sort_order:i}).then(ir=>{
+              if(!ir?.[0]) return;
+              const dbItemId=ir[0].id;
+              Object.entries(item.amounts).forEach(([localCId,amount])=>{
+                const dbCId=cIdMap[localCId];
+                if(dbCId) sbInsertRow("quote_item_amounts",{quote_item_id:dbItemId,contractor_id:dbCId,amount}).catch(console.error);
+              });
+            }).catch(console.error);
+          });
+        });
+      }).catch(console.error);
+      return;
+    }
     setQuotes(prev=>prev.map(q=>q.id===id?fn(q):q));
   };
 
