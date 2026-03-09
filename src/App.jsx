@@ -1409,8 +1409,12 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
   const bw=useCallback(()=>containerRef.current?containerRef.current.getBoundingClientRect().width-LCOL:800,[]);
   const onDown=useCallback((e,id,type)=>{
     e.preventDefault();e.stopPropagation();
-    const t=tasks.find(x=>x.id===id);if(!t||!t.start||!t.end)return;
-    setDrag({id,type,startX:e.clientX,origStart:t.start,origEnd:t.end,bw:bw()});
+    const t=tasks.find(x=>x.id===id);if(!t)return;
+    // If undated, assign placeholder dates at today so dragging can place them
+    const start = t.start||TODAY;
+    const end   = t.end||addDays(TODAY,7);
+    if(!t.start||!t.end) setTasks(prev=>prev.map(x=>x.id===id?{...x,start,end}:x));
+    setDrag({id,type:"move",startX:e.clientX,origStart:start,origEnd:end,bw:bw()});
   },[tasks,bw]);
 
   useEffect(()=>{
@@ -1425,7 +1429,13 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
         return{...t,end:ne>drag.origStart?ne:addDays(drag.origStart,1)};
       }));
     };
-    const up=()=>setDrag(null);
+    const up=()=>{
+      if(drag){
+        const t=tasks.find(x=>x.id===drag.id);
+        if(t&&t.start&&t.end) sbPatch("tasks",drag.id,{start_date:t.start,end_date:t.end}).catch(console.error);
+      }
+      setDrag(null);
+    };
     window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);
     return()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);};
   },[drag,projDays]);
@@ -1450,7 +1460,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
           return <div style={{position:"absolute",left:`${bL}%`,width:`${bW}%`,height:6,background:pc(ph.id),borderRadius:3,opacity:0.25,zIndex:1}}/>;
         },
         onHeaderClick: ()=>onNavigate("project",ph.id),
-        rows: tasks.filter(t=>t.project_id===ph.id && t.start && t.end),
+        rows: tasks.filter(t=>t.project_id===ph.id && !t.parent_task_id),
         taskColor: t=>t.status==="complete"?C.faint:pc(ph.id),
       }));
     }
@@ -1462,7 +1472,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
         color: null,
         headerExtra: ()=>null,
         onHeaderClick: null,
-        rows: tasks.filter(t=>t.assignee===a && t.start && t.end).sort((x,y)=>toMs(x.start)-toMs(y.start)),
+        rows: [...tasks.filter(t=>t.assignee===a && t.start && t.end).sort((x,y)=>toMs(x.start)-toMs(y.start)), ...tasks.filter(t=>t.assignee===a && !t.start)],
         taskColor: t=>t.status==="complete"?C.faint:pc(t.project_id),
       }));
     }
@@ -1473,7 +1483,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
       color:null,
       headerExtra:()=>null,
       onHeaderClick:null,
-      rows:[...tasks].filter(t=>t.start&&t.end).sort((a,b)=>toMs(a.start)-toMs(b.start)),
+      rows:[...tasks.filter(t=>t.start&&t.end).sort((a,b)=>toMs(a.start)-toMs(b.start)), ...tasks.filter(t=>!t.start)],
       taskColor:t=>t.status==="complete"?C.faint:pc(t.project_id),
     }];
   },[groupBy,tasks,projects]);
@@ -1546,11 +1556,12 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
 
             {/* Task rows */}
             {grp.rows.map(t=>{
-              const tL=datePct(t.start,pS,pE),tW=Math.max(datePct(t.end,pS,pE)-tL,0.4);
+              const undated=!t.start||!t.end;
+              const dispStart=t.start||TODAY, dispEnd=t.end||addDays(TODAY,7);
+              const tL=datePct(dispStart,pS,pE), tW=Math.max(datePct(dispEnd,pS,pE)-tL, undated?1.5:0.4);
               const done=t.status==="complete",active=drag?.id===t.id;
               const col=grp.taskColor(t);
               const indent = groupBy==="all" ? 16 : 30;
-              // In assignee/all mode show phase dot; in phase mode show checkbox only
               return (
                 <div key={t.id} style={{display:"flex",alignItems:"center",height:32,borderTop:`1px solid ${C.divider}`}}>
                   <div style={{width:LCOL,flexShrink:0,padding:`0 16px 0 ${indent}px`,borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:7}}>
@@ -1558,18 +1569,28 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
                       {done&&<svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
                     {groupBy!=="phase"&&<div style={{width:6,height:6,borderRadius:"50%",background:pc(t.project_id),flexShrink:0}}/>}
-                    <span style={{fontSize:12,color:done?C.muted:C.text,textDecoration:done?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
+                    <span style={{fontSize:12,color:done?C.muted:undated?C.faint:C.text,textDecoration:done?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
                     {groupBy==="phase"&&<Avatar name={t.assignee} size={14}/>}
                   </div>
                   <div style={{flex:1,position:"relative",height:"100%",display:"flex",alignItems:"center",overflow:"visible"}}>
                     <Grid/>
-                    <div onMouseDown={e=>onDown(e,t.id,"move")} style={{position:"absolute",left:`${tL}%`,width:`${tW}%`,height:18,background:col,borderRadius:3,opacity:active?0.65:(done?0.35:0.8),zIndex:2,display:"flex",alignItems:"center",paddingLeft:6,overflow:"hidden",cursor:active&&drag.type==="move"?"grabbing":"grab",boxShadow:active?`0 0 0 2px ${col}44`:"none"}}>
-                      {tW>5&&<span style={{fontSize:9,color:"white",fontWeight:600,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtD(t.start)}</span>}
-                      <div onMouseDown={e=>onDown(e,t.id,"resize")} style={{position:"absolute",right:0,top:0,bottom:0,width:8,cursor:"ew-resize",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <div onMouseDown={e=>onDown(e,t.id,"move")} style={{
+                      position:"absolute",left:`${tL}%`,width:`${tW}%`,height:18,
+                      background:undated?"transparent":col,
+                      border:undated?`1.5px dashed ${col}`:"none",
+                      borderRadius:3,
+                      opacity:active?0.65:(done?0.35:undated?0.7:0.8),
+                      zIndex:2,display:"flex",alignItems:"center",paddingLeft:6,overflow:"hidden",
+                      cursor:active&&drag?.type==="move"?"grabbing":"grab",
+                      boxShadow:active?`0 0 0 2px ${col}44`:"none"
+                    }}>
+                      {!undated&&tW>5&&<span style={{fontSize:9,color:"white",fontWeight:600,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtD(t.start)}</span>}
+                      {undated&&<span style={{fontSize:9,color:col,fontWeight:600,whiteSpace:"nowrap",pointerEvents:"none",paddingLeft:2}}>no date</span>}
+                      {!undated&&<div onMouseDown={e=>onDown(e,t.id,"resize")} style={{position:"absolute",right:0,top:0,bottom:0,width:8,cursor:"ew-resize",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <div style={{width:1.5,height:"50%",background:"rgba(255,255,255,0.6)",borderRadius:1}}/>
-                      </div>
+                      </div>}
                     </div>
-                    {active&&<div style={{position:"absolute",left:`${tL}%`,top:-26,background:C.text,color:"white",fontSize:11,padding:"3px 8px",borderRadius:4,whiteSpace:"nowrap",pointerEvents:"none",zIndex:20,fontVariantNumeric:"tabular-nums"}}>{fmtD(t.start)} → {fmtD(t.end)} · {daysBetween(t.start,t.end)}d</div>}
+                    {active&&<div style={{position:"absolute",left:`${tL}%`,top:-26,background:C.text,color:"white",fontSize:11,padding:"3px 8px",borderRadius:4,whiteSpace:"nowrap",pointerEvents:"none",zIndex:20,fontVariantNumeric:"tabular-nums"}}>{fmtD(dispStart)} → {fmtD(dispEnd)} · {daysBetween(dispStart,dispEnd)}d</div>}
                   </div>
                 </div>
               );
