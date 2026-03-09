@@ -1414,7 +1414,7 @@ function TimelineView({tasks,setTasks,projects,onNavigate}) {
     const start = t.start||TODAY;
     const end   = t.end||addDays(TODAY,7);
     if(!t.start||!t.end) setTasks(prev=>prev.map(x=>x.id===id?{...x,start,end}:x));
-    setDrag({id,type:"move",startX:e.clientX,origStart:start,origEnd:end,bw:bw()});
+    setDrag({id,type,startX:e.clientX,origStart:start,origEnd:end,bw:bw()});
   },[tasks,bw]);
 
   useEffect(()=>{
