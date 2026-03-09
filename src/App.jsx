@@ -1701,6 +1701,10 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
   const titleRef = useRef(null);
   const newRef   = useRef(null);
   const justCommitted = useRef(false);
+  // price toggle: task id -> bool (true = included in tally)
+  const [priceOn, setPriceOn] = useState({});
+  const isPriceOn = id => priceOn[id]!==false; // default true
+  const togglePrice = (e, id) => { e.stopPropagation(); setPriceOn(p=>({...p,[id]:!isPriceOn(id)})); };
 
   useEffect(()=>{ if(editingId && titleRef.current) titleRef.current.focus(); },[editingId]);
   useEffect(()=>{ if(addingTo  && newRef.current)   newRef.current.focus();   },[addingTo]);
@@ -1871,12 +1875,30 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
         {/* Delete */}
         <button onClick={()=>deleteTask(task.id)}
           style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 2px",lineHeight:1,opacity:isHov?1:0,transition:"opacity 0.1s",flexShrink:0}}>✕</button>
+
+        {/* Price toggle + amount */}
+        <div style={{display:"flex",alignItems:"center",gap:4,width:86,justifyContent:"flex-end",flexShrink:0}}>
+          {(task.price>0||isHov)&&(
+            <button onClick={e=>togglePrice(e,task.id)} title={isPriceOn(task.id)?"Exclude from budget":"Include in budget"}
+              style={{background:"none",border:"none",cursor:"pointer",padding:0,lineHeight:1,fontSize:11,
+                color:isPriceOn(task.id)?C.green:C.faint,opacity:(task.price>0||isHov)?1:0,transition:"color 0.15s"}}>
+              {isPriceOn(task.id)?"●":"○"}
+            </button>
+          )}
+          <span style={{
+            fontSize:12,fontVariantNumeric:"tabular-nums",minWidth:60,textAlign:"right",fontWeight:500,
+            color:!task.price?C.faint:isPriceOn(task.id)?C.text:C.faint,
+            textDecoration:!isPriceOn(task.id)&&task.price?"line-through":"none",
+          }}>
+            {task.price>0?fmtM(task.price):"—"}
+          </span>
+        </div>
       </div>
     );
   };
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:720}}>
+    <div style={{padding:"32px 40px",maxWidth:860}}>
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Tasks</h2>
@@ -1921,6 +1943,23 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
               <div style={{marginLeft:10}}>
                 {group.tasks.map(task=><TaskRow key={task.id} task={task} showMeta={metaMode}/>)}
 
+                {/* Group subtotal */}
+                {(()=>{
+                  const priced = group.tasks.filter(t=>t.price>0);
+                  const subtotal = priced.reduce((s,t)=>s+(isPriceOn(t.id)?t.price:0),0);
+                  const total = priced.reduce((s,t)=>s+t.price,0);
+                  if(!total) return null;
+                  return (
+                    <div style={{display:"flex",alignItems:"center",padding:"5px 10px",marginTop:2}}>
+                      <div style={{flex:1,height:1,background:C.divider}}/>
+                      <div style={{display:"flex",alignItems:"center",gap:6,paddingLeft:12}}>
+                        {subtotal!==total&&<span style={{fontSize:11,color:C.faint,textDecoration:"line-through",fontVariantNumeric:"tabular-nums"}}>{fmtM(total)}</span>}
+                        <span style={{fontSize:12,fontWeight:600,color:subtotal!==total?C.accent:C.muted,fontVariantNumeric:"tabular-nums",minWidth:60,textAlign:"right"}}>{fmtM(subtotal)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Add task — only for phase and assignee groupings */}
                 {group.addPhaseId && (addingTo===group.key ? (
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px"}}>
@@ -1949,6 +1988,23 @@ function TasksGrid({tasks, setTasks, projects, onNavigate, team}) {
           </div>
         );
       })}
+
+      {/* Grand total */}
+      {(()=>{
+        const allPriced = tasks.filter(t=>t.price>0);
+        const grandActive = allPriced.reduce((s,t)=>s+(isPriceOn(t.id)?t.price:0),0);
+        const grandTotal  = allPriced.reduce((s,t)=>s+t.price,0);
+        if(!grandTotal) return null;
+        return (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"14px 10px 0",borderTop:`2px solid ${C.border}`,marginTop:8,gap:12}}>
+            <span style={{fontSize:12,color:C.muted,fontWeight:500}}>Total</span>
+            {grandActive!==grandTotal&&(
+              <span style={{fontSize:13,color:C.faint,textDecoration:"line-through",fontVariantNumeric:"tabular-nums"}}>{fmtM(grandTotal)}</span>
+            )}
+            <span style={{fontSize:15,fontWeight:700,color:grandActive!==grandTotal?C.accent:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(grandActive)}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
