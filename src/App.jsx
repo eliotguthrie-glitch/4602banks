@@ -2178,12 +2178,12 @@ function CfCanvas({h,cfActual,cfProj,cfLines,yMin,yRange,pS,pE,months,todayPct,v
     {months.map(({pct},i)=><div key={i} style={{position:"absolute",left:`${pct}%`,top:0,bottom:0,width:1,background:C.divider,pointerEvents:"none"}}/>)}
     <div style={{position:"absolute",left:`${todayPct}%`,top:0,bottom:0,width:1.5,background:C.accent,opacity:0.8,pointerEvents:"none",zIndex:4}}/>
     <canvas ref={canvasRef} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}}/>
-    {tip&&<div style={{position:"absolute",left:tip.x+12,top:Math.max(tip.y-60,4),background:C.text,color:C.bg,fontSize:11,padding:"8px 12px",borderRadius:6,pointerEvents:"none",zIndex:10,whiteSpace:"nowrap",boxShadow:"0 2px 8px rgba(0,0,0,0.2)",lineHeight:"1.6"}}>
+    {tip&&(()=>{const nearRight=tip.x>(wrapRef.current?.clientWidth||800)-160;return <div style={{position:"absolute",...(nearRight?{right:(wrapRef.current?.clientWidth||800)-tip.x+12}:{left:tip.x+12}),top:Math.max(tip.y-60,4),background:C.text,color:C.bg,fontSize:11,padding:"8px 12px",borderRadius:6,pointerEvents:"none",zIndex:10,whiteSpace:"nowrap",boxShadow:"0 2px 8px rgba(0,0,0,0.2)",lineHeight:"1.6"}}>
       <div style={{fontWeight:600,marginBottom:2}}>{fmtDow(tip.date)}</div>
       {cfLines.actual&&<div style={{color:"#6fdd8b"}}>Actual: {fmtM(tip.actual)}</div>}
       {cfLines.projected&&<div style={{color:"#e88"}}> Projected: {fmtM(tip.projected)}</div>}
       {cfLines.actual&&cfLines.projected&&<div style={{color:"#aaa",borderTop:"1px solid rgba(255,255,255,0.15)",paddingTop:3,marginTop:3}}>Diff: {fmtM(tip.actual-tip.projected)}</div>}
-    </div>}
+    </div>;})()}
     {tip&&<div style={{position:"absolute",left:tip.x,top:0,bottom:0,width:1,background:C.accent,opacity:0.4,pointerEvents:"none",zIndex:5}}/>}
   </div>;
 }
@@ -2191,7 +2191,7 @@ function CfCanvas({h,cfActual,cfProj,cfLines,yMin,yRange,pS,pE,months,todayPct,v
 // ── TIMELINE ───────────────────────────────────────────────────────────────
 const LCOL=320;
 function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,setProceeds,phases,expenses,quotes,updateQuote,team,events,setEvents,onDeleteTask}) {
-  const [tlRange,setTlRange]=useState({start:PROJECT.start,end:PROJECT.end});
+  const [tlRange,setTlRange]=useState({start:addDays(TODAY,-14),end:addDays(TODAY,76)});
   const pS=tlRange.start,pE=tlRange.end,projDays=daysBetween(pS,pE)||1;
   const setRange=(s,e)=>setTlRange({start:s,end:e});
   const zoomPresets=[
@@ -2202,6 +2202,13 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   ];
   const panLeft=()=>{ const d=Math.max(7,Math.round(projDays*0.25)); setRange(addDays(pS,-d),addDays(pE,-d)); };
   const panRight=()=>{ const d=Math.max(7,Math.round(projDays*0.25)); setRange(addDays(pS,d),addDays(pE,d)); };
+  const onWheel=useCallback(e=>{
+    const dx=e.deltaX||e.shiftKey&&e.deltaY;
+    if(!dx)return;
+    e.preventDefault();
+    const days=Math.round(dx/40)*Math.max(1,Math.round(projDays/60));
+    if(days)setTlRange(prev=>({start:addDays(prev.start,days),end:addDays(prev.end,days)}));
+  },[projDays]);
   const containerRef=useRef(null);
   const [drag,setDrag]=useState(null);
   const [dragTip,setDragTip]=useState(null); // {x,y,text}
@@ -2506,7 +2513,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   return (
     <div style={{padding:"28px 40px",userSelect:"none",cursor:drag?(drag.type==="resize"?"ew-resize":"grabbing"):"default"}}>
       {/* Drag date tooltip */}
-      {dragTip&&<div style={{position:"fixed",left:dragTip.x+12,top:dragTip.y-32,background:C.text,color:C.bg,fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>{dragTip.text}</div>}
+      {dragTip&&(()=>{const nearRight=dragTip.x>window.innerWidth-180;return <div style={{position:"fixed",...(nearRight?{right:window.innerWidth-dragTip.x+12}:{left:dragTip.x+12}),top:dragTip.y-32,background:C.text,color:C.bg,fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>{dragTip.text}</div>;})()}
       {/* Header row */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"baseline",gap:12}}>
@@ -2526,7 +2533,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         </div>
       </div>
 
-      <div ref={containerRef} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)"}}>
+      <div ref={containerRef} onWheel={onWheel} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)"}}>
         {/* Month header */}
         <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:C.bg,flexShrink:0}}>
           <div style={{width:LCOL,flexShrink:0,padding:"10px 20px",borderRight:`1px solid ${C.border}`}}>
