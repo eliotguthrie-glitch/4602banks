@@ -1968,7 +1968,7 @@ function EventsView({events,setEvents,projects}) {
 }
 
 // ── DASHBOARD ──────────────────────────────────────────────────────────────
-function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate}) {
+function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate,quotes}) {
   const [taskNum,setTaskNum]=useState(2);
   const [taskUnit,setTaskUnit]=useState("w"); // "w","m","y","all"
   const totalProceeds  = (proceeds||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
@@ -2988,7 +2988,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
       {peek?.type==="task"&&<PeekPanel taskId={peek.id} tasks={tasks} setTasks={setTasks} projects={projects} team={team} quotes={quotes} onClose={()=>setPeek(null)} onNavigate={onNavigate} onDeleteTask={onDeleteTask}/>}
       {peek?.type==="proceed"&&<ProceedPeek id={peek.id} proceeds={proceeds} setProceeds={setProceeds} onClose={()=>setPeek(null)}/>}
       {peek?.type==="event"&&<EventPeek id={peek.id} events={events} setEvents={setEvents} onClose={()=>setPeek(null)}/>}
-      {peek?.type==="project"&&<ProjectPeek id={peek.id} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onClose={()=>setPeek(null)} onNavigate={onNavigate}/>}
+      {peek?.type==="project"&&<ProjectPeek id={peek.id} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onClose={()=>setPeek(null)} onNavigate={onNavigate} quotes={quotes}/>}
     </div>
   );
 }
@@ -3319,7 +3319,7 @@ function EventPeek({id,events,setEvents,onClose}){
   );
 }
 
-function ProjectPeek({id,projects,setProjects,tasks,expenses,onClose,onNavigate}){
+function ProjectPeek({id,projects,setProjects,tasks,expenses,onClose,onNavigate,quotes}){
   const p=projects.find(x=>x.id===id);
   const [dirty,setDirty]=useState(false);
   const [saved,setSaved]=useState(false);
@@ -5590,7 +5590,7 @@ export default function App() {
         {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} initialTaskId={page?.taskId||null} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onDeleteTask={deleteTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
-          {view==="dashboard"&&<Dashboard projects={projects} phases={phases} tasks={tasks} expenses={expenses} events={events} proceeds={proceeds} onNavigate={navigate}/>}
+          {view==="dashboard"&&<Dashboard projects={projects} phases={phases} tasks={tasks} expenses={expenses} events={events} proceeds={proceeds} onNavigate={navigate} quotes={quotes}/>}
           {view==="projects"   &&<ProjectsView phases={phases} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])} quotes={quotes}/>}
           {view==="timeline" &&<TimelineView projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} onNavigate={navigate} proceeds={proceeds} setProceeds={setProceeds} phases={phases} expenses={expenses} quotes={quotes} updateQuote={updateQuote} team={team} events={events} setEvents={setEvents} onDeleteTask={deleteTask}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
