@@ -59,7 +59,18 @@ const searchMaterial = (query) => {
 // DB → app field mappers
 const mapProject   = p => ({...p, start:p.start_date, end:p.end_date, budget:p.target_budget||p.budget||0, target_budget:p.target_budget||p.budget||0, contingency:p.contingency||0, photos:[]});
 const mapTask    = t => ({...t, start:t.start_date, end:t.end_date, actual_cost:t.actual_cost||null, materials:t.materials||[], photos:[]});
-const taskTotalEst = (t, allTasks) => (t.price||0) + (allTasks||[]).filter(s=>s.parent_task_id===t.id).reduce((s,s2)=>s+(s2.price||0),0) + (t.materials||[]).reduce((s,m)=>s+(parseFloat(m.cost)||0)*(parseFloat(m.qty)||1),0);
+const taskTotalEst = (t, allTasks, quotes) => {
+  let est = (t.price||0) + (allTasks||[]).filter(s=>s.parent_task_id===t.id).reduce((s,s2)=>s+(s2.price||0),0) + (t.materials||[]).reduce((s,m)=>s+(parseFloat(m.cost)||0)*(parseFloat(m.qty)||1),0);
+  // If no estimate yet, try quote average
+  if(!est && quotes){
+    const q=(quotes||[]).find(q=>q.task_id===t.id);
+    if(q&&q.contractors.length>0){
+      const tots=q.contractors.map(c=>q.items.reduce((s,item)=>s+(item.amounts[c.id]||0),0)).filter(v=>v>0);
+      if(tots.length) est=Math.round(tots.reduce((s,v)=>s+v,0)/tots.length);
+    }
+  }
+  return est;
+};
 const taskTotalAct = (t, allTasks) => (t.actual_cost||0) + (allTasks||[]).filter(s=>s.parent_task_id===t.id).reduce((s,s2)=>s+(s2.actual_cost||0),0) + (t.materials||[]).reduce((s,m)=>s+(parseFloat(m.actual_cost)||0)*(parseFloat(m.qty)||1),0);
 const mapEvent   = e => ({...e, date:e.event_date, end_date:e.event_end_date||null, type:e.event_type, time:e.event_time||""});
 const mapExpense = e => ({...e, date:e.expense_date});
@@ -1423,7 +1434,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
                 </div>
                 <Avatar name={t.assignee}/>
                 <Chip status={t.status}/>
-                {taskTotalEst(t,tasks)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks))}</span>}{((t.photos||[]).length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{(t.photos||[]).length>0?"📷":""}{t.notes?"📝":""}</span>}
+                {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks,quotes))}</span>}{((t.photos||[]).length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{(t.photos||[]).length>0?"📷":""}{t.notes?"📝":""}</span>}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </div>
             ))}
@@ -1963,7 +1974,7 @@ function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate}) 
   const totalProceeds  = (proceeds||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const totalActual    = tasks.filter(t=>!t.parent_task_id).reduce((s,t)=>s+(taskTotalAct(t,tasks)||0),0);
   const totalProjected = projects.reduce((s,p)=>{
-    const tc=tasks.filter(t=>t.project_id===p.id&&!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks)||0),0);
+    const tc=tasks.filter(t=>t.project_id===p.id&&!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks,quotes)||0),0);
     return s+tc+(p.contingency||0);
   },0);
   const runningBalance = totalProceeds - totalActual;
@@ -2033,7 +2044,7 @@ function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate}) 
           <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Projects</p></div>
           {projects.map((ph,i)=>{
             const pTasks=tasks.filter(t=>t.project_id===ph.id);
-            const projected=pTasks.filter(t=>!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks)||0),0)+(ph.contingency||0);
+            const projected=pTasks.filter(t=>!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks,quotes)||0),0)+(ph.contingency||0);
             const actual=pTasks.filter(t=>!t.parent_task_id).reduce((a,t)=>a+(taskTotalAct(t,tasks)||0),0);
             const cap=projected||ph.target_budget||1;
             return (
@@ -2399,11 +2410,11 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
     // Gather all money-in events (proceeds) and money-out events (actual costs on tasks)
     const ins = (proceeds||[]).filter(p=>p.received_date).map(p=>({date:p.received_date, amount:parseFloat(p.amount)||0})).sort((a,b)=>a.date.localeCompare(b.date));
     const outs = tasks.filter(t=>taskTotalAct(t,tasks)>0 && t.end && !t.parent_task_id).map(t=>({date:t.end, amount:taskTotalAct(t,tasks)})).sort((a,b)=>a.date.localeCompare(b.date));
-    // Projected costs: estimated costs for tasks without actual costs (future work)
-    const projOuts = tasks.filter(t=>!t.parent_task_id && t.end && taskTotalEst(t,tasks)>0 && !taskTotalAct(t,tasks)).map(t=>({date:t.end, amount:taskTotalEst(t,tasks)})).sort((a,b)=>a.date.localeCompare(b.date));
+    // Projected costs: for each task use actual if available, otherwise estimate
+    const projAll = tasks.filter(t=>!t.parent_task_id && t.end && (taskTotalAct(t,tasks)>0||taskTotalEst(t,tasks,quotes)>0)).map(t=>({date:t.end, amount:taskTotalAct(t,tasks)||taskTotalEst(t,tasks,quotes)})).sort((a,b)=>a.date.localeCompare(b.date));
 
     // Combine all dates for point-in-time calculation
-    const allDates = [...new Set([...ins.map(e=>e.date),...outs.map(e=>e.date),...projOuts.map(e=>e.date),pS,pE])].sort();
+    const allDates = [...new Set([...ins.map(e=>e.date),...outs.map(e=>e.date),...projAll.map(e=>e.date),pS,pE])].sort();
 
     // Build cumulative helpers
     const buildCum = (events) => {
@@ -2412,21 +2423,21 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
       pts.push({date:pE, val:cum});
       return pts;
     };
-    const cumIn=buildCum(ins), cumOut=buildCum(outs), cumProjOut=buildCum(projOuts);
+    const cumIn=buildCum(ins), cumOut=buildCum(outs), cumProjAll=buildCum(projAll);
     const valAt = (series,d) => { for(let i=series.length-1;i>=0;i--){ if(series[i].date<=d) return series[i].val; } return 0; };
 
-    // Actual cash flow: proceeds minus actual spending (net real position)
+    // Actual cash flow: proceeds minus actual spending (real money only)
     const actual = allDates.map(d=>({date:d, val:valAt(cumIn,d)-valAt(cumOut,d)}));
-    // Projected cash flow: actual net PLUS future estimated costs subtracted
-    const projected = allDates.map(d=>({date:d, val:valAt(cumIn,d)-valAt(cumOut,d)-valAt(cumProjOut,d)}));
+    // Projected cash flow: proceeds minus all expected costs (actual where paid, estimate where not)
+    const projected = allDates.map(d=>({date:d, val:valAt(cumIn,d)-valAt(cumProjAll,d)}));
 
     const allVals = [...actual.map(p=>p.val),...projected.map(p=>p.val)];
     const yMin = Math.min(...allVals, 0);
     const yMax = Math.max(...allVals, 1000);
     const yRange = (yMax - yMin) * 1.15 || 1000;
 
-    return {actual, projected, yMin, yMax, yRange, cumIn, cumOut, cumProjOut, valAt};
-  },[proceeds, tasks, pS, pE]);
+    return {actual, projected, yMin, yMax, yRange, cumIn, cumOut, cumProjAll, valAt};
+  },[proceeds, tasks, quotes, pS, pE]);
 
   // Cash flow summary at today
   const cfActualNow = cashFlow.valAt(cashFlow.actual, TODAY);
@@ -2811,7 +2822,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
               const isExp = expandedTlTasks.has(t.id);
               return (
                 <Fragment key={t.id}>
-                <div style={{display:"flex",alignItems:"stretch",minHeight:34,borderTop:`1px solid ${C.divider}`}}>
+                <div style={{display:"flex",minHeight:34,borderTop:`1px solid ${C.divider}`}}>
                   <div style={{width:LCOL,flexShrink:0,padding:`6px 12px 6px ${indent+6}px`,borderRight:`1px solid ${C.border}`,display:"flex",alignItems:"flex-start",gap:6,cursor:"pointer"}}
                     onMouseEnter={e=>e.currentTarget.querySelector('.tl-name').style.color=C.accent}
                     onMouseLeave={e=>e.currentTarget.querySelector('.tl-name').style.color=done?C.muted:undated?C.faint:C.text}>
@@ -2825,19 +2836,19 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                       </div>
                     )}
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                         {groupBy!=="phase"&&<div style={{width:7,height:7,borderRadius:"50%",background:pc(t.project_id),flexShrink:0}}/>}
-                        <span className="tl-name" onClick={()=>setPeek({type:"task",id:t.id})} style={{fontSize:12,color:done?C.muted:undated?C.faint:C.text,textDecoration:done?"line-through":"none",lineHeight:"1.35",wordBreak:"break-word"}}>{t.title}</span>
+                        <span className="tl-name" onClick={()=>setPeek({type:"task",id:t.id})} style={{fontSize:12,color:done?C.muted:undated?C.faint:C.text,textDecoration:done?"line-through":"none",lineHeight:"1.35"}}>{t.title}</span>
                         {hasSubs&&<span style={{fontSize:10,color:C.faint,flexShrink:0}}>{subs.filter(s=>s.status==="complete").length}/{subs.length}</span>}
                         {groupBy==="phase"&&<Avatar name={t.assignee} size={16}/>}
                       </div>
-                      {(taskTotalEst(t,tasks)>0||taskTotalAct(t,tasks)>0)&&<div style={{display:"flex",gap:8,marginTop:2}}>
-                        {taskTotalEst(t,tasks)>0&&<span style={{fontSize:10,color:C.faint,fontVariantNumeric:"tabular-nums"}}>Est {fmtM(taskTotalEst(t,tasks))}</span>}
-                        {taskTotalAct(t,tasks)>0&&<span style={{fontSize:10,color:taskTotalAct(t,tasks)>taskTotalEst(t,tasks)?"#c33":C.green,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>Act {fmtM(taskTotalAct(t,tasks))}</span>}
+                      {(taskTotalEst(t,tasks,quotes)>0||taskTotalAct(t,tasks)>0)&&<div style={{display:"flex",gap:8,marginTop:2}}>
+                        {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:10,color:C.faint,fontVariantNumeric:"tabular-nums"}}>Est {fmtM(taskTotalEst(t,tasks,quotes))}</span>}
+                        {taskTotalAct(t,tasks)>0&&<span style={{fontSize:10,color:taskTotalAct(t,tasks)>taskTotalEst(t,tasks,quotes)?"#c33":C.green,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>Act {fmtM(taskTotalAct(t,tasks))}</span>}
                       </div>}
                     </div>
                   </div>
-                  <div style={{flex:1,position:"relative",height:"100%",display:"flex",alignItems:"center",overflow:"visible"}}>
+                  <div style={{flex:1,position:"relative",minHeight:34,display:"flex",alignItems:"center",overflow:"visible"}}>
                     <Grid/>
                     <div onMouseDown={e=>onDown(e,t.id,"move")}
                       onMouseEnter={()=>setHoverTaskId(t.id)} onMouseLeave={()=>setHoverTaskId(null)}
@@ -2866,7 +2877,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                   const sL=datePct(sStart,pS,pE), sW=Math.max(datePct(sEnd,pS,pE)-sL, sUndated?1:0.3);
                   const sDone=st.status==="complete";
                   return (
-                    <div key={st.id} style={{display:"flex",alignItems:"stretch",minHeight:28,borderTop:`1px solid ${C.divider}`,background:C.bg}}>
+                    <div key={st.id} style={{display:"flex",minHeight:28,borderTop:`1px solid ${C.divider}`,background:C.bg}}>
                       <div onClick={()=>setPeek({type:"task",id:st.id})} style={{width:LCOL,flexShrink:0,padding:`4px 12px 4px ${indent+24}px`,borderRight:`1px solid ${C.border}`,display:"flex",alignItems:"flex-start",gap:6,cursor:"pointer"}}
                         onMouseEnter={e=>{const n=e.currentTarget.querySelector('.st-name');if(n)n.style.color=C.accent;}}
                         onMouseLeave={e=>{const n=e.currentTarget.querySelector('.st-name');if(n)n.style.color=sDone?C.muted:C.faint;}}>
@@ -2875,11 +2886,11 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                           {sDone&&<svg width="7" height="7" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
-                          <span className="st-name" style={{fontSize:11,color:sDone?C.muted:C.faint,textDecoration:sDone?"line-through":"none",lineHeight:"1.35",wordBreak:"break-word"}}>{st.title}</span>
+                          <span className="st-name" style={{fontSize:11,color:sDone?C.muted:C.faint,textDecoration:sDone?"line-through":"none",lineHeight:"1.35"}}>{st.title}</span>
                           {(st.price||0)>0&&<div style={{fontSize:10,color:C.faint,fontVariantNumeric:"tabular-nums",marginTop:1}}>{fmtM(st.price)}</div>}
                         </div>
                       </div>
-                      <div style={{flex:1,position:"relative",height:"100%",display:"flex",alignItems:"center"}}>
+                      <div style={{flex:1,position:"relative",minHeight:28,display:"flex",alignItems:"center"}}>
                         <Grid/>
                         {!sUndated&&<div style={{position:"absolute",left:`${sL}%`,width:`${sW}%`,height:14,background:col,borderRadius:2,opacity:sDone?0.25:0.45}}/>}
                       </div>
@@ -3326,7 +3337,7 @@ function ProjectPeek({id,projects,setProjects,tasks,expenses,onClose,onNavigate}
   const pTasks=tasks.filter(t=>t.project_id===id);
   const done=pTasks.filter(t=>t.status==="complete").length;
   const spent=expenses.filter(e=>e.phase_id===id).reduce((s,e)=>s+(e.amount||0),0);
-  const taskCost=pTasks.reduce((s,t)=>s+(taskTotalAct(t,tasks)||taskTotalEst(t,tasks)||0),0);
+  const taskCost=pTasks.reduce((s,t)=>s+(taskTotalAct(t,tasks)||taskTotalEst(t,tasks,quotes)||0),0);
   return (
     <PeekShell onClose={onClose} title={p.name}
       icon={<div style={{width:10,height:10,borderRadius:2,background:pc(id)}}/>}
@@ -3649,7 +3660,7 @@ function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, 
 }
 
 // ── CASH FLOW CHART ────────────────────────────────────────────────────────
-function CashFlowChart({proceeds, tasks, projects, onNavigate}) {
+function CashFlowChart({proceeds, tasks, projects, quotes, onNavigate}) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [chartW, setChartW] = useState(760);
@@ -3874,7 +3885,7 @@ function TaskBudgetTable({projects, phases, tasks, onNavigate}) {
       const faProjects = projects.filter(p=>String(p.phase_id)===String(fa.id));
       const projRows = faProjects.map(p=>{
         const pTasks = tasks.filter(t=>t.project_id===p.id && !t.parent_task_id);
-        const projected = pTasks.reduce((s,t)=>s+(taskTotalEst(t,tasks)||0),0) + (p.contingency||0);
+        const projected = pTasks.reduce((s,t)=>s+(taskTotalEst(t,tasks,quotes)||0),0) + (p.contingency||0);
         const actual = pTasks.reduce((s,t)=>s+(taskTotalAct(t,tasks)||0),0);
         return {project:p, tasks:pTasks, projected, actual, variance:projected-actual};
       });
@@ -3887,7 +3898,7 @@ function TaskBudgetTable({projects, phases, tasks, onNavigate}) {
   const ungroupedProjects = projects.filter(p=>!p.phase_id||!phases.find(fa=>String(fa.id)===String(p.phase_id)));
   const ungroupedRows = ungroupedProjects.map(p=>{
     const pTasks = tasks.filter(t=>t.project_id===p.id && !t.parent_task_id);
-    const projected = pTasks.reduce((s,t)=>s+(taskTotalEst(t,tasks)||0),0) + (p.contingency||0);
+    const projected = pTasks.reduce((s,t)=>s+(taskTotalEst(t,tasks,quotes)||0),0) + (p.contingency||0);
     const actual = pTasks.reduce((s,t)=>s+(taskTotalAct(t,tasks)||0),0);
     return {project:p, tasks:pTasks, projected, actual, variance:projected-actual};
   });
@@ -4022,7 +4033,7 @@ function TaskBudgetTable({projects, phases, tasks, onNavigate}) {
 }
 
 // ── TASKS GRID ────────────────────────────────────────────────────────────
-function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, setTeam, onDeleteTask}) {
+function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, setTeam, onDeleteTask, quotes}) {
   const [filter, setFilter] = useState("all");
   const [groupBy, setGroupBy] = useState("project");
   const [addMode, setAddMode] = useState(null); // null | "single" | "dump"
@@ -4446,7 +4457,7 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
                     </div>
                   </div>
                   {t.assignee&&<Avatar name={t.assignee} size={22}/>}
-                  {taskTotalEst(t,tasks)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks))}</span>}
+                  {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks,quotes))}</span>}
                   <Chip status={t.status}/>
                   {onDeleteTask&&<button data-del onClick={e=>{e.stopPropagation();if(confirm(`Delete "${t.title}"${subs.length?` and ${subs.length} subtask(s)`:""}?`)){subs.forEach(s=>onDeleteTask(s.id));onDeleteTask(t.id);}}} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.faint,padding:"2px 4px",borderRadius:4,opacity:0,transition:"opacity 0.15s"}} title="Delete task">🗑</button>}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -4694,7 +4705,7 @@ function TeamView({team, setTeam, tasks, projects}) {
 }
 
 // ── BUDGET ─────────────────────────────────────────────────────────────────
-function BudgetView({projects, phases, expenses, tasks, proceeds, setProceeds, onNavigate}) {
+function BudgetView({projects, phases, expenses, tasks, proceeds, setProceeds, onNavigate, quotes}) {
   const [budgetTab, setBudgetTab] = useState("cashflow");
   const [showAddProceed, setShowAddProceed] = useState(false);
   const [proceedForm, setProceedForm] = useState({label:"",amount:"",received_date:"",type:"contribution"});
@@ -4712,7 +4723,7 @@ function BudgetView({projects, phases, expenses, tasks, proceeds, setProceeds, o
   const totalProceeds = (proceeds||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0), 0);
   const totalActual   = tasks.filter(t=>!t.parent_task_id).reduce((s,t)=>s+(taskTotalAct(t,tasks)||0), 0);
   const totalProjected = projects.reduce((s,p)=>{
-    const taskCosts = tasks.filter(t=>t.project_id===p.id&&!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks)||0),0);
+    const taskCosts = tasks.filter(t=>t.project_id===p.id&&!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks,quotes)||0),0);
     return s + taskCosts + (p.contingency||0);
   }, 0);
   const runningBalance = totalProceeds - totalActual;
@@ -4767,7 +4778,7 @@ function BudgetView({projects, phases, expenses, tasks, proceeds, setProceeds, o
 
       {/* ── Cash Flow tab ─────────────────────────────────────────────────── */}
       {budgetTab==="cashflow"&&(
-        <CashFlowChart proceeds={proceeds} tasks={tasks} projects={projects} onNavigate={onNavigate}/>
+        <CashFlowChart proceeds={proceeds} tasks={tasks} projects={projects} quotes={quotes} onNavigate={onNavigate}/>
       )}
 
       {/* ── P&L tab ───────────────────────────────────────────────────────── */}
@@ -5011,7 +5022,7 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, on
   );
 }
 
-function ProjectsView({phases, projects, setProjects, tasks, expenses, onNavigate, onAddProject}) {
+function ProjectsView({phases, projects, setProjects, tasks, expenses, onNavigate, onAddProject, quotes}) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({name:"",status:"planning",target_budget:"",contingency:"",start:"",end:"",notes:"",phase_id:""});
   const [saving, setSaving] = useState(false);
@@ -5580,10 +5591,10 @@ export default function App() {
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} phases={phases} tasks={tasks} expenses={expenses} events={events} proceeds={proceeds} onNavigate={navigate}/>}
-          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
+          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])} quotes={quotes}/>}
           {view==="timeline" &&<TimelineView projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} onNavigate={navigate} proceeds={proceeds} setProceeds={setProceeds} phases={phases} expenses={expenses} quotes={quotes} updateQuote={updateQuote} team={team} events={events} setEvents={setEvents} onDeleteTask={deleteTask}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
-          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} setProjects={setProjects} onNavigate={navigate} team={team} setTeam={setTeam} onDeleteTask={deleteTask}/>}
+          {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} setProjects={setProjects} onNavigate={navigate} team={team} setTeam={setTeam} onDeleteTask={deleteTask} quotes={quotes}/>}
           {view==="quotes"   &&<QuotesView quotes={quotes} projects={projects} tasks={tasks} setQuotes={setQuotes} setTasks={setTasks} updateQuote={updateQuote} onNavigate={navigate}/>}
 
           {view==="team"     &&<TeamView team={team} setTeam={setTeam} tasks={tasks} projects={projects}/>}
