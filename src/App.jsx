@@ -2207,6 +2207,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const [dragTip,setDragTip]=useState(null); // {x,y,text}
   const [groupBy,setGroupBy]=useState("phase"); // "phase" | "assignee" | "all"
   const [hideComplete,setHideComplete]=useState(false);
+  const [hideDoneEvents,setHideDoneEvents]=useState(false);
   const [showCashFlow,setShowCashFlow]=useState(true);
 
   const [cfLines,setCfLines]=useState({actual:true,projected:true});
@@ -2525,9 +2526,9 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         </div>
       </div>
 
-      <div ref={containerRef} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+      <div ref={containerRef} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)"}}>
         {/* Month header */}
-        <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:C.bg}}>
+        <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:C.bg,flexShrink:0}}>
           <div style={{width:LCOL,flexShrink:0,padding:"10px 20px",borderRight:`1px solid ${C.border}`}}>
             <span style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>{colLabel}</span>
           </div>
@@ -2567,7 +2568,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         )}
 
         {/* ── Proceeds rows at top ─────────────────────────── */}
-        <div style={{borderBottom:`1px solid ${C.border}`}}>
+        <div style={{borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
           <div onClick={()=>setShowProceeds(s=>!s)} style={{display:"flex",alignItems:"center",height:36,background:C.bg,cursor:"pointer"}}>
             <div style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8}}>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showProceeds?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s",flexShrink:0}}>
@@ -2677,49 +2678,8 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           </>}
         </div>
 
-        {/* ── Inline Cash Flow chart ─────────────────────────── */}
-        <div style={{borderBottom:`2px solid ${C.border}`}}>
-          <div style={{display:"flex",alignItems:"center",height:36,background:C.bg}}>
-            <div onClick={()=>setShowCashFlow(s=>!s)} style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
-              <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showCashFlow?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s"}}>
-                <path d="M3 1.5L7 5L3 8.5" stroke={C.muted} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              </svg>
-              <span style={{fontSize:12,fontWeight:600,color:C.text}}>Cash Flow</span>
-            </div>
-            <div style={{flex:1,display:"flex",alignItems:"center",gap:12,padding:"0 16px"}}>
-              <span style={{fontSize:12,color:C.green,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>Actual {fmtM(cfActualNow)}</span>
-              <span style={{fontSize:12,color:"#C0392B",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>Projected {fmtM(cfProjectedNow)}</span>
-            </div>
-          </div>
-          {showCashFlow&&(()=>{
-            const CF_H=160;
-            const {yMin,yMax:yHi,yRange,actual:cfActual,projected:cfProj}=cashFlow;
-            const fmtAxis=v=>v>=1000||v<=-1000?`$${Math.round(v/1000)}k`:`$${Math.round(v)}`;
-            const topVal=yMin+yRange;
-            const botVal=yMin;
-            return <div style={{display:"flex",height:CF_H}}>
-              <div style={{width:LCOL,flexShrink:0,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"10px 16px 10px 36px"}}>
-                <span style={{fontSize:11,color:C.muted,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>{fmtAxis(topVal)}</span>
-                <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                  {[
-                    {k:"actual",color:C.green,label:"Actual",dash:false},
-                    {k:"projected",color:"#C0392B",label:"Projected",dash:true},
-                  ].map(({k,color,label,dash})=>(
-                    <div key={k} onClick={()=>toggleCfLine(k)} style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",opacity:cfLines[k]?1:0.35,transition:"opacity 0.15s"}}>
-                      <div style={{width:14,height:2.5,background:color,borderRadius:1,flexShrink:0,...(dash?{borderTop:"1.5px dashed",background:"transparent",borderColor:color}:{})}}/>
-                      <span style={{fontSize:11,color:cfLines[k]?C.text:C.muted,fontWeight:500,userSelect:"none"}}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-                <span style={{fontSize:11,color:C.muted}}>{fmtAxis(botVal)}</span>
-              </div>
-              <CfCanvas h={CF_H} cfActual={cfActual} cfProj={cfProj} cfLines={cfLines} yMin={yMin} yRange={yRange} pS={pS} pE={pE} months={months} todayPct={todayPct} valAt={cashFlow.valAt}/>
-            </div>;
-          })()}
-        </div>
-
         {/* ── Events rows ─────────────────────────────────────── */}
-        <div style={{borderBottom:`1px solid ${C.border}`}}>
+        <div style={{borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
           <div onClick={()=>setShowEvents(s=>!s)} style={{display:"flex",alignItems:"center",height:36,background:C.bg,cursor:"pointer"}}>
             <div style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8}}>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showEvents?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s",flexShrink:0}}>
@@ -2729,13 +2689,14 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
               <span style={{fontSize:12,fontWeight:600,color:C.text}}>Events</span>
               <span style={{fontSize:11,color:C.faint,marginLeft:"auto",flexShrink:0}}>{(events||[]).length}</span>
               {showEvents&&<>
-                <button onClick={e=>{e.stopPropagation();sortEvents("date");}} title="Sort by date" style={{marginLeft:8,background:"none",border:`1px solid ${C.border}`,borderRadius:3,cursor:"pointer",padding:"1px 5px",fontSize:10,color:C.muted,lineHeight:1.4}}>&#8693;</button>
+                <button onClick={e=>{e.stopPropagation();setHideDoneEvents(v=>!v);}} style={{marginLeft:8,background:"none",border:`1px solid ${hideDoneEvents?C.accent:C.border}`,borderRadius:3,cursor:"pointer",padding:"1px 5px",fontSize:10,color:hideDoneEvents?C.accent:C.muted,lineHeight:1.4,fontWeight:hideDoneEvents?600:400}}>Hide done</button>
+                <button onClick={e=>{e.stopPropagation();sortEvents("date");}} title="Sort by date" style={{background:"none",border:`1px solid ${C.border}`,borderRadius:3,cursor:"pointer",padding:"1px 5px",fontSize:10,color:C.muted,lineHeight:1.4}}>&#8693;</button>
                 <button onClick={e=>{e.stopPropagation();sortEvents("alpha");}} title="Sort A-Z" style={{background:"none",border:`1px solid ${C.border}`,borderRadius:3,cursor:"pointer",padding:"1px 5px",fontSize:10,color:C.muted,lineHeight:1.4}}>A&#8595;</button>
               </>}
             </div>
             <div style={{flex:1,position:"relative",height:"100%",display:"flex",alignItems:"center"}}>
               <Grid/>
-              {!showEvents&&(events||[]).filter(ev=>ev.date).map(ev=>{
+              {!showEvents&&(events||[]).filter(ev=>ev.date&&(!hideDoneEvents||!ev.done)).map(ev=>{
                 const pctX=datePct(ev.date,pS,pE);
                 const col=eventColor(ev.type);
                 const hovered=hoverEventId===ev.id;
@@ -2753,7 +2714,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
             </div>
           </div>
           {showEvents&&<>
-          {(events||[]).map(ev=>{
+          {(events||[]).filter(ev=>!hideDoneEvents||!ev.done).map(ev=>{
             const pctX = ev.date ? datePct(ev.date,pS,pE) : null;
             const col = eventColor(ev.type);
             const active = drag?.kind==="event"&&drag.id===ev.id;
@@ -2822,6 +2783,49 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           </>}
         </div>
 
+        {/* ── Inline Cash Flow chart ─────────────────────────── */}
+        <div style={{borderBottom:`2px solid ${C.border}`,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",height:36,background:C.bg}}>
+            <div onClick={()=>setShowCashFlow(s=>!s)} style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+              <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showCashFlow?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s"}}>
+                <path d="M3 1.5L7 5L3 8.5" stroke={C.muted} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              </svg>
+              <span style={{fontSize:12,fontWeight:600,color:C.text}}>Cash Flow</span>
+            </div>
+            <div style={{flex:1,display:"flex",alignItems:"center",gap:12,padding:"0 16px"}}>
+              <span style={{fontSize:12,color:C.green,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>Actual {fmtM(cfActualNow)}</span>
+              <span style={{fontSize:12,color:"#C0392B",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>Projected {fmtM(cfProjectedNow)}</span>
+            </div>
+          </div>
+          {showCashFlow&&(()=>{
+            const CF_H=160;
+            const {yMin,yMax:yHi,yRange,actual:cfActual,projected:cfProj}=cashFlow;
+            const fmtAxis=v=>v>=1000||v<=-1000?`$${Math.round(v/1000)}k`:`$${Math.round(v)}`;
+            const topVal=yMin+yRange;
+            const botVal=yMin;
+            return <div style={{display:"flex",height:CF_H}}>
+              <div style={{width:LCOL,flexShrink:0,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"10px 16px 10px 36px"}}>
+                <span style={{fontSize:11,color:C.muted,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>{fmtAxis(topVal)}</span>
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {[
+                    {k:"actual",color:C.green,label:"Actual",dash:false},
+                    {k:"projected",color:"#C0392B",label:"Projected",dash:true},
+                  ].map(({k,color,label,dash})=>(
+                    <div key={k} onClick={()=>toggleCfLine(k)} style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",opacity:cfLines[k]?1:0.35,transition:"opacity 0.15s"}}>
+                      <div style={{width:14,height:2.5,background:color,borderRadius:1,flexShrink:0,...(dash?{borderTop:"1.5px dashed",background:"transparent",borderColor:color}:{})}}/>
+                      <span style={{fontSize:11,color:cfLines[k]?C.text:C.muted,fontWeight:500,userSelect:"none"}}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+                <span style={{fontSize:11,color:C.muted}}>{fmtAxis(botVal)}</span>
+              </div>
+              <CfCanvas h={CF_H} cfActual={cfActual} cfProj={cfProj} cfLines={cfLines} yMin={yMin} yRange={yRange} pS={pS} pE={pE} months={months} todayPct={todayPct} valAt={cashFlow.valAt}/>
+            </div>;
+          })()}
+        </div>
+
+        {/* ── Scrollable task area ───────────────────────────── */}
+        <div style={{flex:1,overflowY:"auto"}}>
         {/* ── Task controls ────────────────────────────────────── */}
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",background:C.bg,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:11,color:C.muted,fontWeight:600,marginRight:2,textTransform:"uppercase",letterSpacing:"0.04em"}}>Group by</span>
@@ -3050,6 +3054,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
             </div>
           </div>
         )}
+        </div>{/* end scrollable task area */}
       </div>
 
       {/* ── Side peek panels ─────────────────────────────────── */}
@@ -3098,7 +3103,7 @@ function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigat
     const cur=tasks.find(x=>x.id===taskId);if(!cur)return;
     setSaving(true);
     sbPatch("tasks",taskId,{
-      status:cur.status,assignee:cur.assignee||"",start_date:cur.start||null,end_date:cur.end||null,
+      phase_id:cur.project_id||null,status:cur.status,assignee:cur.assignee||"",start_date:cur.start||null,end_date:cur.end||null,
       price:cur.price||0,actual_cost:cur.actual_cost||null,notes:cur.notes||"",materials:cur.materials||[],
     }).then(()=>{
       setDirty(false);setSaved(true);setSaving(false);
@@ -3127,10 +3132,11 @@ function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigat
               <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:C.muted,padding:"4px 8px"}}>✕</button>
             </div>
           </div>
-          {ph?<div style={{display:"flex",alignItems:"center",gap:6}}>
-            <div style={{width:7,height:7,borderRadius:2,background:pc(ph.id)}}/>
-            <span style={{fontSize:12,color:C.muted}}>{ph.name}</span>
-          </div>:<span style={{fontSize:12,color:C.muted,fontStyle:"italic"}}>No project assigned</span>}
+          <select value={t.project_id||""} onChange={e=>{const v=e.target.value?parseInt(e.target.value):null;updateT(x=>({...x,project_id:v}));sbPatch("tasks",taskId,{phase_id:v}).catch(console.error);}}
+            style={{border:`1px solid ${C.border}`,borderRadius:5,padding:"4px 8px",fontSize:12,color:C.muted,background:C.surface,fontFamily:"inherit",outline:"none",maxWidth:220}}>
+            <option value="">No project</option>
+            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
           <div style={{display:"flex",gap:0,marginTop:12,borderBottom:`1px solid ${C.border}`}}>
             {[{id:"detail",label:"Detail"},{id:"quotes",label:"Quotes"+(taskQuote?" ✓":"")}].map(tab=>(
               <button key={tab.id} onClick={()=>setPeekTab(tab.id)}
