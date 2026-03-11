@@ -54,7 +54,7 @@ const mapProject   = p => ({...p, start:p.start_date, end:p.end_date, budget:p.t
 const mapTask    = t => ({...t, start:t.start_date, end:t.end_date, actual_cost:t.actual_cost||null, materials:t.materials||[], photos:[]});
 const taskTotalEst = (t, allTasks) => (t.price||0) + (allTasks||[]).filter(s=>s.parent_task_id===t.id).reduce((s,s2)=>s+(s2.price||0),0) + (t.materials||[]).reduce((s,m)=>s+(parseFloat(m.cost)||0)*(parseFloat(m.qty)||1),0);
 const taskTotalAct = (t, allTasks) => (t.actual_cost||0) + (allTasks||[]).filter(s=>s.parent_task_id===t.id).reduce((s,s2)=>s+(s2.actual_cost||0),0) + (t.materials||[]).reduce((s,m)=>s+(parseFloat(m.actual_cost)||0)*(parseFloat(m.qty)||1),0);
-const mapEvent   = e => ({...e, date:e.event_date, type:e.event_type, time:e.event_time||""});
+const mapEvent   = e => ({...e, date:e.event_date, end_date:e.event_end_date||null, type:e.event_type, time:e.event_time||""});
 const mapExpense = e => ({...e, date:e.expense_date});
 const mapQuote   = q => ({
   id:q.id, project_id:q.project_id, task_id:q.task_id||null, awarded_to:q.awarded_to, notes:q.notes,
@@ -1420,19 +1420,144 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
   );
 }
 
+// ── MINI CALENDAR (single date or range picker) ───────────────────────────
+function MiniCal({mode,setMode,startDate,endDate,onSelect}) {
+  const [viewDate,setViewDate]=useState(()=>{
+    const d=startDate?new Date(startDate+"T12:00:00"):new Date();
+    return {year:d.getFullYear(),month:d.getMonth()};
+  });
+  const {year,month}=viewDate;
+  const first=new Date(year,month,1);
+  const startDay=first.getDay();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const weeks=[];
+  let day=1-startDay;
+  for(let w=0;w<6;w++){
+    const row=[];
+    for(let d=0;d<7;d++,day++){
+      row.push(day>=1&&day<=daysInMonth?day:null);
+    }
+    if(row.some(d=>d!==null))weeks.push(row);
+  }
+  const pad=n=>String(n).padStart(2,"0");
+  const toISO=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
+  const isSelected=d=>{
+    if(!d)return false;
+    const iso=toISO(year,month,d);
+    if(mode==="single") return iso===startDate;
+    return iso===startDate||iso===endDate;
+  };
+  const isInRange=d=>{
+    if(!d||mode==="single"||!startDate||!endDate)return false;
+    const iso=toISO(year,month,d);
+    return iso>startDate&&iso<endDate;
+  };
+  const isToday=d=>{
+    if(!d)return false;
+    return toISO(year,month,d)===TODAY;
+  };
+  const handleClick=d=>{
+    if(!d)return;
+    const iso=toISO(year,month,d);
+    if(mode==="single") onSelect(iso,null);
+    else {
+      if(!startDate||endDate||iso<startDate) onSelect(iso,null);
+      else onSelect(startDate,iso);
+    }
+  };
+  const prevMonth=()=>setViewDate(v=>v.month===0?{year:v.year-1,month:11}:{...v,month:v.month-1});
+  const nextMonth=()=>setViewDate(v=>v.month===11?{year:v.year+1,month:0}:{...v,month:v.month+1});
+  const monthLabel=new Date(year,month).toLocaleDateString("en-US",{month:"long",year:"numeric"});
+
+  return (
+    <div>
+      {/* Mode radio */}
+      <div style={{display:"flex",gap:12,marginBottom:10}}>
+        {[{v:"single",l:"Single date"},{v:"range",l:"Date range"}].map(o=>(
+          <label key={o.v} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:C.text,cursor:"pointer"}}>
+            <input type="radio" name="calMode" checked={mode===o.v} onChange={()=>{setMode(o.v);if(o.v==="single")onSelect(startDate,null);}}
+              style={{accentColor:C.accent,margin:0}}/>
+            {o.l}
+          </label>
+        ))}
+      </div>
+      {/* Month nav */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <button onClick={prevMonth} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:16,padding:"2px 6px"}}>‹</button>
+        <span style={{fontSize:12,fontWeight:600,color:C.text}}>{monthLabel}</span>
+        <button onClick={nextMonth} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:16,padding:"2px 6px"}}>›</button>
+      </div>
+      {/* Day headers */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",textAlign:"center",marginBottom:4}}>
+        {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d=>(
+          <span key={d} style={{fontSize:10,fontWeight:600,color:C.faint,padding:"2px 0"}}>{d}</span>
+        ))}
+      </div>
+      {/* Day grid */}
+      {weeks.map((row,wi)=>(
+        <div key={wi} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",textAlign:"center"}}>
+          {row.map((d,di)=>{
+            const sel=isSelected(d);
+            const inR=isInRange(d);
+            const td=isToday(d);
+            return (
+              <div key={di} onClick={()=>handleClick(d)}
+                style={{padding:"5px 0",cursor:d?"pointer":"default",fontSize:12,fontWeight:sel?700:td?600:400,
+                  color:sel?"#fff":d?C.text:"transparent",
+                  background:sel?C.accent:inR?C.accentBg:"transparent",
+                  borderRadius:sel?4:0,
+                  transition:"background 0.1s",
+                  ...(td&&!sel?{boxShadow:`inset 0 -2px 0 ${C.accent}`}:{}),
+                }}>
+                {d||""}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      {/* Selection label */}
+      <div style={{marginTop:8,fontSize:11,color:C.muted}}>
+        {mode==="single"?(startDate?fmtD(startDate):"Click a date")
+          :(startDate&&endDate?`${fmtD(startDate)} → ${fmtD(endDate)}`
+            :startDate?`${fmtD(startDate)} → click end date`
+            :"Click start date")}
+      </div>
+    </div>
+  );
+}
+
 // ── EVENTS VIEW ────────────────────────────────────────────────────────────
 function EventsView({events,setEvents,projects}) {
   const [showAdd,setShowAdd]=useState(false);
-  const [form,setForm]=useState({date:"",time:"",title:"",type:"inspection",project_id:"",notes:""});
+  const [form,setForm]=useState({date:"",end_date:"",time:"",title:"",type:"inspection",project_id:"",notes:"",calMode:"single"});
   const [editId,setEditId]=useState(null);
-  const [editForm,setEditForm]=useState({date:"",time:"",title:"",type:"",project_id:"",notes:""});
+  const [editForm,setEditForm]=useState({date:"",end_date:"",time:"",title:"",type:"",project_id:"",notes:"",calMode:"single"});
+  const [dumpMode,setDumpMode]=useState(false);
+  const [dumpText,setDumpText]=useState("");
+  const [dumpDate,setDumpDate]=useState(TODAY);
+  const [dumpType,setDumpType]=useState("other");
+  const dumpRef=useRef(null);
+  useEffect(()=>{if(dumpMode&&dumpRef.current)dumpRef.current.focus();},[dumpMode]);
 
-  const startEdit = ev => { setEditId(ev.id); setEditForm({date:ev.date||"",time:ev.time||"",title:ev.title||"",type:ev.type||"inspection",project_id:ev.project_id?String(ev.project_id):"",notes:ev.notes||""}); };
+  const submitDump = async () => {
+    const lines = dumpText.split("\n").map(l=>l.trim()).filter(Boolean);
+    if(!lines.length) return;
+    for(const title of lines) {
+      try {
+        const rows = await sbInsertRow("events", {title, event_date:dumpDate, event_type:dumpType, event_time:null, project_id:null, notes:"", done:false});
+        if(rows?.[0]) setEvents(prev=>[...prev, mapEvent(rows[0])]);
+      } catch(e){console.error(e);}
+    }
+    setDumpText("");setDumpMode(false);
+  };
+
+  const startEdit = ev => { setEditId(ev.id); setEditForm({date:ev.date||"",end_date:ev.end_date||"",time:ev.time||"",title:ev.title||"",type:ev.type||"inspection",project_id:ev.project_id?String(ev.project_id):"",notes:ev.notes||"",calMode:ev.end_date?"range":"single"}); };
   const cancelEdit = () => { setEditId(null); };
   const saveEdit = () => {
     if(!editForm.date||!editForm.title) return;
-    const patch = {event_date:editForm.date,event_time:editForm.time||null,title:editForm.title,event_type:editForm.type,project_id:editForm.project_id?parseInt(editForm.project_id):null,notes:editForm.notes};
-    setEvents(prev=>prev.map(e=>e.id===editId?{...e,date:editForm.date,time:editForm.time||"",title:editForm.title,type:editForm.type,project_id:patch.project_id,notes:editForm.notes}:e));
+    const endD=editForm.calMode==="range"&&editForm.end_date?editForm.end_date:null;
+    const patch = {event_date:editForm.date,event_end_date:endD,event_time:editForm.time||null,title:editForm.title,event_type:editForm.type,project_id:editForm.project_id?parseInt(editForm.project_id):null,notes:editForm.notes};
+    setEvents(prev=>prev.map(e=>e.id===editId?{...e,date:editForm.date,end_date:endD,time:editForm.time||"",title:editForm.title,type:editForm.type,project_id:patch.project_id,notes:editForm.notes}:e));
     sbPatch("events",editId,patch).catch(console.error);
     setEditId(null);
   };
@@ -1451,12 +1576,13 @@ function EventsView({events,setEvents,projects}) {
 
   const addEvent=()=>{
     if(!form.date||!form.title) return;
+    const endD=form.calMode==="range"&&form.end_date?form.end_date:null;
     const dbEvent = {
-      event_date:form.date, event_time:form.time||null, title:form.title, event_type:form.type,
+      event_date:form.date, event_end_date:endD, event_time:form.time||null, title:form.title, event_type:form.type,
       project_id:form.project_id?parseInt(form.project_id):null,
       notes:form.notes, done:false,
     };
-    setForm({date:"",time:"",title:"",type:"inspection",project_id:"",notes:""});
+    setForm({date:"",end_date:"",time:"",title:"",type:"inspection",project_id:"",notes:"",calMode:"single"});
     setShowAdd(false);
     sbInsertRow("events", dbEvent).then(rows=>{
       if(rows?.[0]) setEvents(prev=>[...prev, mapEvent(rows[0])]);
@@ -1478,49 +1604,90 @@ function EventsView({events,setEvents,projects}) {
     <div style={{padding:"32px 40px",maxWidth:800}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Events</h2>
-        <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>+ Add event</Btn>
+        <div style={{display:"flex",gap:8}}>
+          <Btn variant={dumpMode?"primary":"default"} onClick={()=>{setDumpMode(m=>!m);setShowAdd(false);}}>Brain dump</Btn>
+          <Btn variant="primary" onClick={()=>{setShowAdd(s=>!s);setDumpMode(false);}}>+ Add event</Btn>
+        </div>
       </div>
+
+      {/* Brain dump textarea */}
+      {dumpMode&&(
+        <div style={{border:`1px solid ${C.accent}`,borderRadius:8,background:C.surface,padding:16,marginBottom:16}}>
+          <p style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:6}}>Brain dump</p>
+          <p style={{fontSize:11,color:C.muted,marginBottom:10}}>Type one event per line. They'll all be created with the date and type below.</p>
+          <div style={{display:"flex",gap:10,marginBottom:10}}>
+            <div>
+              <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Date</p>
+              <input type="date" value={dumpDate} onChange={e=>setDumpDate(e.target.value)}
+                style={{border:`1px solid ${C.border}`,borderRadius:5,padding:"5px 8px",fontSize:12,color:C.text,background:C.bg,fontFamily:"inherit",outline:"none"}}/>
+            </div>
+            <div>
+              <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Type</p>
+              <select value={dumpType} onChange={e=>setDumpType(e.target.value)}
+                style={{border:`1px solid ${C.border}`,borderRadius:5,padding:"5px 8px",fontSize:12,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
+                {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <textarea ref={dumpRef} value={dumpText} onChange={e=>setDumpText(e.target.value)}
+            placeholder={"Final inspection\nWalk-through with buyer\nPermit pickup\nContractor meeting"}
+            rows={6}
+            style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"10px 12px",fontSize:13,color:C.text,background:C.bg,fontFamily:"inherit",outline:"none",resize:"vertical",lineHeight:"1.7"}}
+            onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+            <span style={{fontSize:11,color:C.muted}}>{dumpText.split("\n").filter(l=>l.trim()).length} event(s)</span>
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={()=>{setDumpText("");setDumpMode(false);}}>Cancel</Btn>
+              <Btn variant="primary" onClick={submitDump}>Create all</Btn>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add form */}
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New event</p>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-            <div>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Date</p>
-              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
-                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+          <div style={{display:"flex",gap:20,marginBottom:14}}>
+            {/* Calendar */}
+            <div style={{width:240,flexShrink:0,border:`1px solid ${C.border}`,borderRadius:8,padding:12,background:C.bg}}>
+              <MiniCal mode={form.calMode} setMode={m=>setForm(f=>({...f,calMode:m,end_date:m==="single"?"":f.end_date}))}
+                startDate={form.date} endDate={form.end_date}
+                onSelect={(s,e)=>setForm(f=>({...f,date:s||"",end_date:e||""}))}/>
             </div>
-            <div>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Time (optional)</p>
-              <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))}
-                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+            {/* Fields */}
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:10}}>
+              <div>
+                <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Title</p>
+                <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Event title"/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Time (optional)</p>
+                  <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))}
+                    style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+                </div>
+                <div>
+                  <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Type</p>
+                  <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}
+                    style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
+                    {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Project (optional)</p>
+                <select value={form.project_id} onChange={e=>setForm(f=>({...f,project_id:e.target.value}))}
+                  style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
+                  <option value="">— No project —</option>
+                  {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
+                <NoteField value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="Any details..." rows={2}/>
+              </div>
             </div>
-            <div>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Type</p>
-              <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}
-                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
-                {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{marginBottom:10}}>
-            <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Title</p>
-            <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Event title"/>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-            <div>
-              <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Project (optional)</p>
-              <select value={form.project_id} onChange={e=>setForm(f=>({...f,project_id:e.target.value}))}
-                style={{width:"100%",border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none"}}>
-                <option value="">— No project —</option>
-                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{marginBottom:14}}>
-            <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Notes</p>
-            <NoteField value={form.notes} onChange={v=>setForm(f=>({...f,notes:v}))} placeholder="Any details..." rows={2}/>
           </div>
           <div style={{display:"flex",gap:8}}>
             <Btn variant="primary" onClick={addEvent}>Add event</Btn>
@@ -1566,37 +1733,40 @@ function EventsView({events,setEvents,projects}) {
               const fSt={border:`1px solid ${C.border}`,borderRadius:5,padding:"5px 8px",fontSize:12,color:C.text,background:C.bg,fontFamily:"inherit",outline:"none"};
               return isEditing?(
                 <div key={ev.id} style={{padding:"14px 16px",borderBottom:i<evs.length-1?`1px solid ${C.divider}`:"none",background:C.accentBg}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-                    <div>
-                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Date</p>
-                      <input type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))} style={{...fSt,width:"100%"}}/>
+                  <div style={{display:"flex",gap:16,marginBottom:10}}>
+                    <div style={{width:220,flexShrink:0,border:`1px solid ${C.border}`,borderRadius:8,padding:10,background:C.bg}}>
+                      <MiniCal mode={editForm.calMode} setMode={m=>setEditForm(f=>({...f,calMode:m,end_date:m==="single"?"":f.end_date}))}
+                        startDate={editForm.date} endDate={editForm.end_date}
+                        onSelect={(s,e)=>setEditForm(f=>({...f,date:s||"",end_date:e||""}))}/>
                     </div>
-                    <div>
-                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Time</p>
-                      <input type="time" value={editForm.time} onChange={e=>setEditForm(f=>({...f,time:e.target.value}))} style={{...fSt,width:"100%"}}/>
-                    </div>
-                    <div>
-                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Type</p>
-                      <select value={editForm.type} onChange={e=>setEditForm(f=>({...f,type:e.target.value}))} style={{...fSt,width:"100%",appearance:"none"}}>
-                        {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div style={{marginBottom:8}}>
-                    <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Title</p>
-                    <input value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))} style={{...fSt,width:"100%"}} onKeyDown={e=>e.key==="Enter"&&saveEdit()}/>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                    <div>
-                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Project</p>
-                      <select value={editForm.project_id} onChange={e=>setEditForm(f=>({...f,project_id:e.target.value}))} style={{...fSt,width:"100%",appearance:"none"}}>
-                        <option value="">— No project —</option>
-                        {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Notes</p>
-                      <input value={editForm.notes} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))} style={{...fSt,width:"100%"}} placeholder="Notes..."/>
+                    <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
+                      <div>
+                        <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Title</p>
+                        <input value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))} style={{...fSt,width:"100%"}} onKeyDown={e=>e.key==="Enter"&&saveEdit()}/>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                        <div>
+                          <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Time</p>
+                          <input type="time" value={editForm.time} onChange={e=>setEditForm(f=>({...f,time:e.target.value}))} style={{...fSt,width:"100%"}}/>
+                        </div>
+                        <div>
+                          <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Type</p>
+                          <select value={editForm.type} onChange={e=>setEditForm(f=>({...f,type:e.target.value}))} style={{...fSt,width:"100%",appearance:"none"}}>
+                            {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Project</p>
+                        <select value={editForm.project_id} onChange={e=>setEditForm(f=>({...f,project_id:e.target.value}))} style={{...fSt,width:"100%",appearance:"none"}}>
+                          <option value="">— No project —</option>
+                          {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Notes</p>
+                        <input value={editForm.notes} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))} style={{...fSt,width:"100%"}} placeholder="Notes..."/>
+                      </div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
@@ -1620,6 +1790,7 @@ function EventsView({events,setEvents,projects}) {
                       {ph&&<><span style={{color:C.faint,fontSize:11}}>·</span><span style={{fontSize:11,color:C.muted}}>{ph.name}</span></>}
                     </div>
                     <p style={{fontSize:13,fontWeight:500,color:ev.done?C.muted:C.text,textDecoration:ev.done?"line-through":"none"}}>{ev.title}</p>
+                    {ev.end_date&&<p style={{fontSize:11,color:C.accent,marginTop:2}}>{fmtD(ev.date)} → {fmtD(ev.end_date)}</p>}
                     {ev.time&&<p style={{fontSize:12,color:C.muted,marginTop:2}}>{ev.time}</p>}{ev.notes&&<p style={{fontSize:12,color:C.muted,marginTop:3,lineHeight:1.4}}>{ev.notes}</p>}
                   </div>
                   {/* Actions */}
@@ -3628,7 +3799,7 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
         setNewAssigneeName("");setShowNewAssignee(false);
       } catch(e){console.error(e);}
     }
-    const dbTask = {project_id:projectId, title, assignee, start_date:null, end_date:null, status:"todo", notes:"", sort_order:0};
+    const dbTask = {project_id:projectId, title, assignee, start_date:TODAY, end_date:TODAY, status:"todo", notes:"", sort_order:0};
     setAddForm({title:"",project_id:projectId?String(projectId):"",assignee:""});
     try {
       const rows = await sbInsertRow("tasks", dbTask);
@@ -3643,9 +3814,9 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
     const newTasks = [];
     for(const title of lines) {
       try {
-        const rows = await sbInsertRow("tasks", {title, project_id:null, assignee:"", start_date:null, end_date:null, status:"todo", notes:"", sort_order:0});
+        const rows = await sbInsertRow("tasks", {title, project_id:null, assignee:"", start_date:TODAY, end_date:TODAY, status:"todo", notes:"", sort_order:0});
         if(rows?.[0]) newTasks.push(mapTask(rows[0]));
-      } catch(e){console.error(e);}
+      } catch(e){console.error("Brain dump insert failed:",e);alert("Brain dump error: "+e.message);}
     }
     if(newTasks.length) {
       setTasks(prev=>[...prev,...newTasks]);
