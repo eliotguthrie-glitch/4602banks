@@ -1424,6 +1424,18 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
 function EventsView({events,setEvents,projects}) {
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({date:"",time:"",title:"",type:"inspection",project_id:"",notes:""});
+  const [editId,setEditId]=useState(null);
+  const [editForm,setEditForm]=useState({date:"",time:"",title:"",type:"",project_id:"",notes:""});
+
+  const startEdit = ev => { setEditId(ev.id); setEditForm({date:ev.date||"",time:ev.time||"",title:ev.title||"",type:ev.type||"inspection",project_id:ev.project_id?String(ev.project_id):"",notes:ev.notes||""}); };
+  const cancelEdit = () => { setEditId(null); };
+  const saveEdit = () => {
+    if(!editForm.date||!editForm.title) return;
+    const patch = {event_date:editForm.date,event_time:editForm.time||null,title:editForm.title,event_type:editForm.type,project_id:editForm.project_id?parseInt(editForm.project_id):null,notes:editForm.notes};
+    setEvents(prev=>prev.map(e=>e.id===editId?{...e,date:editForm.date,time:editForm.time||"",title:editForm.title,type:editForm.type,project_id:patch.project_id,notes:editForm.notes}:e));
+    sbPatch("events",editId,patch).catch(console.error);
+    setEditId(null);
+  };
 
   const grouped=useMemo(()=>{
     const sorted=[...events].sort((a,b)=>toMs(a.date)-toMs(b.date));
@@ -1550,7 +1562,49 @@ function EventsView({events,setEvents,projects}) {
               const ph=projects.find(p=>p.id===ev.project_id);
               const col=eventColor(ev.type);
               const isPast=toMs(ev.date)<toMs(TODAY)&&!ev.done;
-              return (
+              const isEditing=editId===ev.id;
+              const fSt={border:`1px solid ${C.border}`,borderRadius:5,padding:"5px 8px",fontSize:12,color:C.text,background:C.bg,fontFamily:"inherit",outline:"none"};
+              return isEditing?(
+                <div key={ev.id} style={{padding:"14px 16px",borderBottom:i<evs.length-1?`1px solid ${C.divider}`:"none",background:C.accentBg}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
+                    <div>
+                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Date</p>
+                      <input type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))} style={{...fSt,width:"100%"}}/>
+                    </div>
+                    <div>
+                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Time</p>
+                      <input type="time" value={editForm.time} onChange={e=>setEditForm(f=>({...f,time:e.target.value}))} style={{...fSt,width:"100%"}}/>
+                    </div>
+                    <div>
+                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Type</p>
+                      <select value={editForm.type} onChange={e=>setEditForm(f=>({...f,type:e.target.value}))} style={{...fSt,width:"100%",appearance:"none"}}>
+                        {EVENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{marginBottom:8}}>
+                    <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Title</p>
+                    <input value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))} style={{...fSt,width:"100%"}} onKeyDown={e=>e.key==="Enter"&&saveEdit()}/>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                    <div>
+                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Project</p>
+                      <select value={editForm.project_id} onChange={e=>setEditForm(f=>({...f,project_id:e.target.value}))} style={{...fSt,width:"100%",appearance:"none"}}>
+                        <option value="">— No project —</option>
+                        {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Notes</p>
+                      <input value={editForm.notes} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))} style={{...fSt,width:"100%"}} placeholder="Notes..."/>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <Btn variant="primary" onClick={saveEdit} style={{fontSize:11,padding:"4px 12px"}}>Save</Btn>
+                    <Btn onClick={cancelEdit} style={{fontSize:11,padding:"4px 10px"}}>Cancel</Btn>
+                  </div>
+                </div>
+              ):(
                 <div key={ev.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:i<evs.length-1?`1px solid ${C.divider}`:"none",opacity:ev.done?0.5:1}}>
                   {/* Date column */}
                   <div style={{width:48,flexShrink:0,textAlign:"center",paddingTop:1}}>
@@ -1560,7 +1614,7 @@ function EventsView({events,setEvents,projects}) {
                   {/* Color bar */}
                   <div style={{width:3,alignSelf:"stretch",background:col,borderRadius:2,flexShrink:0,minHeight:36}}/>
                   {/* Content */}
-                  <div style={{flex:1,minWidth:0}}>
+                  <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>startEdit(ev)}>
                     <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
                       <span style={{fontSize:11,fontWeight:600,color:col,textTransform:"uppercase",letterSpacing:"0.04em"}}>{eventLabel(ev.type)}</span>
                       {ph&&<><span style={{color:C.faint,fontSize:11}}>·</span><span style={{fontSize:11,color:C.muted}}>{ph.name}</span></>}
@@ -1570,6 +1624,9 @@ function EventsView({events,setEvents,projects}) {
                   </div>
                   {/* Actions */}
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    <button onClick={()=>startEdit(ev)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:12,padding:"0 2px"}} title="Edit">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
                     <CheckBox done={ev.done} onClick={()=>toggleDone(ev.id)}/>
                     <button onClick={()=>removeEvent(ev.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:13,padding:"0 2px"}}>✕</button>
                   </div>
@@ -4425,10 +4482,42 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, on
   );
 }
 
-function ProjectsView({phases, projects, tasks, expenses, onNavigate, onAddProject}) {
+function ProjectsView({phases, projects, setProjects, tasks, expenses, onNavigate, onAddProject}) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({name:"",status:"planning",target_budget:"",contingency:"",start:"",end:"",notes:"",phase_id:""});
   const [saving, setSaving] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkForm, setBulkForm] = useState({phase_id:"",status:"",start:"",end:""});
+  const toggleBulkMode = () => { setBulkMode(p=>!p); setSelected(new Set()); };
+  const toggleSelect = id => setSelected(prev=>{const s=new Set(prev);if(s.has(id))s.delete(id);else s.add(id);return s;});
+  const selectAll = () => { if(selected.size===projects.length) setSelected(new Set()); else setSelected(new Set(projects.map(p=>p.id))); };
+
+  const applyBulk = () => {
+    const patch = {};
+    if(bulkForm.phase_id) patch.phase_id = bulkForm.phase_id==="none"?null:parseInt(bulkForm.phase_id);
+    if(bulkForm.status) patch.status = bulkForm.status;
+    if(bulkForm.start) patch.start_date = bulkForm.start;
+    if(bulkForm.end) patch.end_date = bulkForm.end;
+    if(Object.keys(patch).length===0) return;
+    const localPatch = {};
+    if(patch.phase_id!==undefined) localPatch.phase_id = patch.phase_id;
+    if(patch.status) localPatch.status = patch.status;
+    if(patch.start_date) localPatch.start = patch.start_date;
+    if(patch.end_date) localPatch.end = patch.end_date;
+    setProjects(prev=>prev.map(p=>selected.has(p.id)?{...p,...localPatch}:p));
+    selected.forEach(id=>sbPatch("projects",id,patch).catch(console.error));
+    setSelected(new Set()); setBulkForm({phase_id:"",status:"",start:"",end:""});
+  };
+  const bulkDelete = () => {
+    if(!confirm(`Delete ${selected.size} project(s)?`)) return;
+    setProjects(prev=>prev.filter(p=>!selected.has(p.id)));
+    selected.forEach(id=>sbDel("projects",id).catch(console.error));
+    setSelected(new Set());
+  };
+
+  const selSt = {border:`1px solid ${C.border}`,borderRadius:5,padding:"5px 8px",fontSize:12,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"};
+  const inputSt = {border:`1px solid ${C.border}`,borderRadius:5,padding:"5px 8px",fontSize:12,color:C.text,background:C.bg,fontFamily:"inherit",outline:"none"};
 
   const addProject = () => {
     if(!form.name) return;
@@ -4452,12 +4541,17 @@ function ProjectsView({phases, projects, tasks, expenses, onNavigate, onAddProje
   const ProjectRow = ({pr, i, total}) => {
     const projectTasks=tasks.filter(t=>t.project_id===pr.id);
     const done=projectTasks.filter(t=>t.status==="complete").length;
-    const spent=expenses.filter(e=>e.project_id===pr.id).reduce((s,e)=>s+e.amount,0);
+    const isSel=selected.has(pr.id);
     return(
-      <div onClick={()=>onNavigate("project",pr.id)}
-        style={{display:"flex",alignItems:"center",gap:14,padding:"12px 18px",borderBottom:i<total-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
-        onMouseEnter={e=>e.currentTarget.style.background=C.hover}
-        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+      <div onClick={()=>bulkMode?toggleSelect(pr.id):onNavigate("project",pr.id)}
+        style={{display:"flex",alignItems:"center",gap:14,padding:"12px 18px",borderBottom:i<total-1?`1px solid ${C.divider}`:"none",cursor:"pointer",
+          background:isSel?C.accentBg:"transparent"}}
+        onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=C.hover;}}
+        onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+        {bulkMode&&(
+          <input type="checkbox" checked={isSel} onChange={()=>toggleSelect(pr.id)}
+            style={{accentColor:C.accent,width:16,height:16,cursor:"pointer",flexShrink:0}} onClick={e=>e.stopPropagation()}/>
+        )}
         <div style={{width:7,height:7,borderRadius:2,background:pc(pr.id),flexShrink:0}}/>
         <div style={{flex:1,minWidth:0}}>
           <p style={{fontSize:13,fontWeight:500,color:C.text}}>{pr.name}</p>
@@ -4466,7 +4560,7 @@ function ProjectsView({phases, projects, tasks, expenses, onNavigate, onAddProje
         <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
           <span style={{fontSize:12,color:C.muted}}>{done}/{projectTasks.length} tasks</span>
           <span style={{fontSize:12,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(pr.target_budget||pr.budget||0)}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          {!bulkMode&&<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
         </div>
       </div>
     );
@@ -4478,6 +4572,39 @@ function ProjectsView({phases, projects, tasks, expenses, onNavigate, onAddProje
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Projects</h2>
         <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>+ Add project</Btn>
       </div>
+
+      {/* Count bar + bulk toggle */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <span style={{fontSize:12,color:C.muted}}>
+          {bulkMode?`${selected.size} of ${projects.length} selected`:`${projects.length} project${projects.length!==1?"s":""}`}
+          {bulkMode&&selected.size<projects.length&&<span onClick={selectAll} style={{marginLeft:8,color:C.accent,cursor:"pointer"}}>Select all</span>}
+          {bulkMode&&selected.size===projects.length&&selected.size>0&&<span onClick={selectAll} style={{marginLeft:8,color:C.accent,cursor:"pointer"}}>Deselect all</span>}
+        </span>
+        <Btn onClick={toggleBulkMode} style={{fontSize:11,padding:"4px 10px"}}>{bulkMode?"Exit bulk edit":"Bulk edit"}</Btn>
+      </div>
+
+      {/* Bulk edit bar */}
+      {bulkMode&&selected.size>0&&(
+        <div style={{border:`1px solid ${C.accent}`,borderRadius:8,background:C.accentBg,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          <select value={bulkForm.phase_id} onChange={e=>setBulkForm(f=>({...f,phase_id:e.target.value}))} style={selSt}>
+            <option value="">Phase…</option>
+            <option value="none">No phase</option>
+            {phases.map(fa=><option key={fa.id} value={fa.id}>{fa.name}</option>)}
+          </select>
+          <select value={bulkForm.status} onChange={e=>setBulkForm(f=>({...f,status:e.target.value}))} style={selSt}>
+            <option value="">Status…</option>
+            <option value="planning">Planning</option>
+            <option value="active">Active</option>
+            <option value="complete">Complete</option>
+            <option value="on_hold">On hold</option>
+          </select>
+          <input type="date" value={bulkForm.start} onChange={e=>setBulkForm(f=>({...f,start:e.target.value}))} style={{...inputSt,width:130}} placeholder="Start"/>
+          <input type="date" value={bulkForm.end} onChange={e=>setBulkForm(f=>({...f,end:e.target.value}))} style={{...inputSt,width:130}} placeholder="End"/>
+          <Btn variant="primary" onClick={applyBulk} style={{fontSize:11,padding:"5px 12px"}}>Apply</Btn>
+          <Btn onClick={bulkDelete} style={{fontSize:11,padding:"5px 12px",color:"#e55"}}>Delete</Btn>
+          <span onClick={()=>{setSelected(new Set());setBulkForm({phase_id:"",status:"",start:"",end:""});}} style={{fontSize:11,color:C.muted,cursor:"pointer",marginLeft:4}}>Clear</span>
+        </div>
+      )}
 
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
@@ -4923,7 +5050,7 @@ export default function App() {
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} phases={phases} tasks={tasks} expenses={expenses} events={events} proceeds={proceeds} onNavigate={navigate}/>}
-          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
+          {view==="projects"   &&<ProjectsView phases={phases} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])}/>}
           {view==="timeline" &&<TimelineView projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} onNavigate={navigate} proceeds={proceeds} setProceeds={setProceeds} phases={phases} expenses={expenses} quotes={quotes} updateQuote={updateQuote} team={team} events={events} setEvents={setEvents}/>}
           {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
           {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} setProjects={setProjects} onNavigate={navigate} team={team} setTeam={setTeam}/>}
