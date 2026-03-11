@@ -3815,7 +3815,7 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
     const newTasks = [];
     for(const title of lines) {
       try {
-        const rows = await sbInsertRow("tasks", {title, project_id:dumpProject?parseInt(dumpProject):projects[0]?.id||1, assignee:"", start_date:TODAY, end_date:TODAY, status:"todo", notes:"", sort_order:0});
+        const rows = await sbInsertRow("tasks", {title, project_id:dumpProject?parseInt(dumpProject):null, assignee:"", start_date:TODAY, end_date:TODAY, status:"todo", notes:"", sort_order:0});
         if(rows?.[0]) newTasks.push(mapTask(rows[0]));
       } catch(e){console.error("Brain dump insert failed:",e);alert("Brain dump error: "+e.message);}
     }
@@ -3884,11 +3884,11 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
       {addMode==="dump"&&(
         <div style={{border:`1px solid ${C.accent}`,borderRadius:8,background:C.surface,padding:16,marginBottom:16}}>
           <p style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:6}}>Brain dump</p>
-          <p style={{fontSize:11,color:C.muted,marginBottom:10}}>Type one task per line. They'll be created under the selected project.</p>
+          <p style={{fontSize:11,color:C.muted,marginBottom:10}}>Type one task per line. Assign a project now or leave uncategorized.</p>
           <div style={{marginBottom:10}}>
             <select value={dumpProject} onChange={e=>setDumpProject(e.target.value)}
               style={{border:`1px solid ${C.border}`,borderRadius:5,padding:"6px 10px",fontSize:12,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",appearance:"none",minWidth:200}}>
-              <option value="">First project ({projects[0]?.name||"—"})</option>
+              <option value="">No project (uncategorized)</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
