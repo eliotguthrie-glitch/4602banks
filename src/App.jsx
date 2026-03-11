@@ -403,7 +403,7 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
 }
 
 // ── TASK DETAIL ────────────────────────────────────────────────────────────
-function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask}) {
+function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask, onDeleteTask}) {
   const subtasks = tasks.filter(t=>t.parent_task_id===taskId);
   const [addingSub, setAddingSub] = useState(false);
   const subRef = useRef(null);
@@ -476,6 +476,8 @@ function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask}) {
               style={{width:52,fontSize:12,color:C.text,border:"none",background:"transparent",fontFamily:"inherit",outline:"none",padding:0,textAlign:"right",fontVariantNumeric:"tabular-nums"}}/>
           </div>
           {st.assignee?<span style={{width:24,fontSize:11,color:C.muted,textAlign:"center",flexShrink:0}} title={st.assignee}>{st.assignee.charAt(0)}</span>:<span style={{width:24,flexShrink:0}}/>}
+          <button onClick={e=>{e.stopPropagation();if(onDeleteTask)onDeleteTask(st.id);}} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:12,padding:"0 2px",flexShrink:0,opacity:0.5}} title="Remove subtask"
+            onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity="0.5"}>✕</button>
         </div>
       ))}
       {addingSub&&(
@@ -492,7 +494,7 @@ function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask}) {
   );
 }
 
-function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddTask,onUpdateQuote,onAddEvent,team}) {
+function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddTask,onDeleteTask,onUpdateQuote,onAddEvent,team}) {
   const [addedToCalendar, setAddedToCalendar] = useState(false);
   const [taskTab, setTaskTab] = useState("detail"); // "detail" | "quotes"
   const [editingTitle, setEditingTitle] = useState(false);
@@ -617,7 +619,7 @@ function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddT
           </div>
 
           {/* Subtasks */}
-          <SubtaskPanel taskId={task.id} projectId={task.project_id} tasks={tasks||[]} onUpdateTask={onUpdateTask} onAddTask={onAddTask}/>
+          <SubtaskPanel taskId={task.id} projectId={task.project_id} tasks={tasks||[]} onUpdateTask={onUpdateTask} onAddTask={onAddTask} onDeleteTask={onDeleteTask}/>
 
           {/* Materials */}
           <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,overflow:"hidden"}}>
@@ -1077,7 +1079,7 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavigate,onUpdateProject,onUpdateTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
+function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavigate,onUpdateProject,onUpdateTask,onDeleteTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
   const phase = project; // alias for minimal churn
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(initialTaskId||null);
@@ -1101,7 +1103,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
 
   if(activeTaskId){
     const t=tasks.find(x=>x.id===activeTaskId);
-    if(t) return <TaskPage task={t} phase={phase} tasks={tasks} quotes={quotes} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onAddTask={t=>onAddTasks([t])} onUpdateQuote={onUpdateQuote} onAddEvent={onAddEvent} team={team}/>;
+    if(t) return <TaskPage task={t} phase={phase} tasks={tasks} quotes={quotes} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} onAddTask={t=>onAddTasks([t])} onUpdateQuote={onUpdateQuote} onAddEvent={onAddEvent} team={team}/>;
   }
 
   const saveEdit = () => {
@@ -1952,6 +1954,8 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const [hideComplete,setHideComplete]=useState(false);
   const [showCashFlow,setShowCashFlow]=useState(true);
   const [showDrawdown,setShowDrawdown]=useState(false);
+  const [cfLines,setCfLines]=useState({proceeds:true,actual:true,projected:true,drawdown:false});
+  const toggleCfLine=k=>setCfLines(prev=>({...prev,[k]:!prev[k]}));
   const [showProceeds,setShowProceeds]=useState(true);
   const [showEvents,setShowEvents]=useState(true);
   const [collapsedGroups,setCollapsedGroups]=useState({});
@@ -1995,6 +1999,39 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         res.push({label:c.toLocaleDateString("en-US",{month:"short",year:"2-digit"}),pct:datePct(iso,pS,pE)});
       }
       c=new Date(c.getFullYear(),c.getMonth()+1,1);
+    }
+    return res;
+  },[pS,pE,projDays]);
+
+  // Week lines (show when <=6 months)
+  const weekLines=useMemo(()=>{
+    if(projDays>200) return [];
+    const res=[];
+    // Find first Monday on or after pS
+    const s=new Date(pS+"T12:00:00");
+    const dow=s.getDay();
+    const off=dow===0?1:dow===1?0:8-dow;
+    let c=new Date(s);c.setDate(c.getDate()+off);
+    const e=new Date(pE+"T12:00:00");
+    while(c<=e){
+      const iso=c.toISOString().split("T")[0];
+      res.push({iso,pct:datePct(iso,pS,pE),label:c.toLocaleDateString("en-US",{month:"short",day:"numeric"})});
+      c.setDate(c.getDate()+7);
+    }
+    return res;
+  },[pS,pE,projDays]);
+
+  // Day lines (show when <=45 days)
+  const dayLines=useMemo(()=>{
+    if(projDays>45) return [];
+    const res=[];
+    let c=new Date(pS+"T12:00:00");
+    const e=new Date(pE+"T12:00:00");
+    while(c<=e){
+      const iso=c.toISOString().split("T")[0];
+      const dow=c.getDay();
+      res.push({iso,pct:datePct(iso,pS,pE),isWeekend:dow===0||dow===6,label:c.toLocaleDateString("en-US",{weekday:"narrow"})});
+      c.setDate(c.getDate()+1);
     }
     return res;
   },[pS,pE,projDays]);
@@ -2083,7 +2120,15 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const todayPct=datePct(TODAY,pS,pE);
   const Grid=()=>(
     <>
+      {/* Day shading for weekends */}
+      {dayLines.filter(d=>d.isWeekend).map((d,i)=><div key={"wd"+i} style={{position:"absolute",left:`${d.pct}%`,top:0,bottom:0,width:`${100/projDays}%`,background:"rgba(0,0,0,0.025)",pointerEvents:"none"}}/>)}
+      {/* Day lines */}
+      {dayLines.map((d,i)=><div key={"d"+i} style={{position:"absolute",left:`${d.pct}%`,top:0,bottom:0,width:1,background:d.isWeekend?C.border:"rgba(0,0,0,0.04)",pointerEvents:"none"}}/>)}
+      {/* Week lines */}
+      {projDays>45&&weekLines.map((w,i)=><div key={"w"+i} style={{position:"absolute",left:`${w.pct}%`,top:0,bottom:0,width:1,background:C.divider,opacity:0.6,pointerEvents:"none"}}/>)}
+      {/* Month lines */}
       {months.map(({pct},i)=><div key={i} style={{position:"absolute",left:`${pct}%`,top:0,bottom:0,width:1,background:C.divider,pointerEvents:"none"}}/>)}
+      {/* Today line */}
       <div style={{position:"absolute",left:`${todayPct}%`,top:0,bottom:0,width:1.5,background:C.accent,opacity:0.8,pointerEvents:"none",zIndex:4}}/>
     </>
   );
@@ -2189,7 +2234,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
 
       <div ref={containerRef} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
         {/* Month header */}
-        <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.bg}}>
+        <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:C.bg}}>
           <div style={{width:LCOL,flexShrink:0,padding:"10px 20px",borderRight:`1px solid ${C.border}`}}>
             <span style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>{colLabel}</span>
           </div>
@@ -2202,6 +2247,31 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
             <div style={{position:"absolute",left:`${todayPct}%`,top:0,bottom:0,width:1.5,background:C.accent,opacity:0.6}}/>
           </div>
         </div>
+        {/* Week/day sub-header when zoomed in */}
+        {projDays<=90&&projDays>45&&(
+          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.bg}}>
+            <div style={{width:LCOL,flexShrink:0,borderRight:`1px solid ${C.border}`}}/>
+            <div style={{flex:1,position:"relative",height:22}}>
+              {weekLines.map((w,i)=>(
+                <div key={i} style={{position:"absolute",left:`${w.pct}%`,top:0,bottom:0,display:"flex",alignItems:"center",paddingLeft:4}}>
+                  <span style={{fontSize:9,color:C.faint,whiteSpace:"nowrap"}}>{w.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {projDays<=45&&(
+          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.bg}}>
+            <div style={{width:LCOL,flexShrink:0,borderRight:`1px solid ${C.border}`}}/>
+            <div style={{flex:1,position:"relative",height:22}}>
+              {dayLines.map((d,i)=>(
+                <div key={i} style={{position:"absolute",left:`${d.pct}%`,top:0,bottom:0,display:"flex",alignItems:"center",justifyContent:"center",width:`${100/projDays}%`}}>
+                  <span style={{fontSize:9,color:d.isWeekend?C.faint:C.muted,fontWeight:d.iso===TODAY?700:400,whiteSpace:"nowrap"}}>{new Date(d.iso+"T12:00:00").getDate()}<span style={{fontSize:8,marginLeft:1}}>{d.label}</span></span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Proceeds rows at top ─────────────────────────── */}
         <div style={{borderBottom:`1px solid ${C.border}`}}>
@@ -2327,25 +2397,24 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
               <span style={{fontSize:12,color:C.green,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>In {fmtM(cfInNow)}</span>
               <span style={{fontSize:12,color:"#C0392B",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>Out {fmtM(cfOutNow)}</span>
               <span style={{fontSize:12,color:cfInNow-cfOutNow>=0?C.green:"#C0392B",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>Net {fmtM(cfInNow-cfOutNow)}</span>
-              {showDrawdown&&<span style={{fontSize:12,color:ddBudgetNow>=0?C.accent:"#C0392B",fontWeight:600,fontVariantNumeric:"tabular-nums"}}>Budget bal {fmtM(ddBudgetNow)}</span>}
-              <label onClick={e=>e.stopPropagation()} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontSize:11,color:showDrawdown?C.accent:C.muted,fontWeight:500}}>
-                <input type="checkbox" checked={showDrawdown} onChange={e=>setShowDrawdown(e.target.checked)} style={{accentColor:C.accent,width:13,height:13,cursor:"pointer"}}/>
-                Draw down
-              </label>
             </div>
           </div>
           {showCashFlow&&(
             <div style={{display:"flex",height:160}}>
               <div style={{width:LCOL,flexShrink:0,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"10px 16px 10px 36px"}}>
                 <span style={{fontSize:11,color:C.muted,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>{cashFlow.yMax>=1000?`$${Math.round(cashFlow.yMax/1000)}k`:`$${Math.round(cashFlow.yMax)}`}</span>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:14,height:2.5,background:C.green,borderRadius:1,flexShrink:0}}/><span style={{fontSize:12,color:C.muted}}>Proceeds</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:14,height:2.5,background:"#C0392B",borderRadius:1,flexShrink:0}}/><span style={{fontSize:12,color:C.muted}}>Actual</span></div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:14,height:2.5,background:C.muted,borderRadius:1,borderTop:"1.5px dashed",flexShrink:0}}/><span style={{fontSize:12,color:C.muted}}>Projected</span></div>
-                  {showDrawdown&&<>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:14,height:2.5,background:C.accent,borderRadius:1,flexShrink:0}}/><span style={{fontSize:12,color:C.muted}}>Balance</span></div>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:14,height:2.5,background:C.accent,borderRadius:1,opacity:0.5,borderTop:"1.5px dashed",flexShrink:0}}/><span style={{fontSize:12,color:C.muted}}>Budget bal</span></div>
-                  </>}
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {[
+                    {k:"proceeds",color:C.green,label:"Proceeds",dash:false},
+                    {k:"actual",color:"#C0392B",label:"Actual",dash:false},
+                    {k:"projected",color:C.muted,label:"Projected",dash:true},
+                    {k:"drawdown",color:C.accent,label:"Draw down",dash:false},
+                  ].map(({k,color,label,dash})=>(
+                    <div key={k} onClick={()=>toggleCfLine(k)} style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",opacity:cfLines[k]?1:0.35,transition:"opacity 0.15s"}}>
+                      <div style={{width:14,height:2.5,background:color,borderRadius:1,flexShrink:0,...(dash?{borderTop:"1.5px dashed",background:"transparent",borderColor:color}:{})}}/>
+                      <span style={{fontSize:11,color:cfLines[k]?C.text:C.muted,fontWeight:500,userSelect:"none"}}>{label}</span>
+                    </div>
+                  ))}
                 </div>
                 <span style={{fontSize:11,color:C.muted}}>$0</span>
               </div>
@@ -2363,15 +2432,17 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                   const yMax=cashFlow.yMax||1;
                   const sy=v=>h-(v/yMax)*h;
                   // Proceeds fill
-                  ctx.beginPath();
-                  ctx.moveTo(sx(cashFlow.cIn[0].date),h);
-                  cashFlow.cIn.forEach((p,i)=>{
-                    if(i>0) ctx.lineTo(sx(p.date),sy(cashFlow.cIn[i-1].val));
-                    ctx.lineTo(sx(p.date),sy(p.val));
-                  });
-                  ctx.lineTo(sx(cashFlow.cIn[cashFlow.cIn.length-1].date),h);
-                  ctx.closePath();
-                  ctx.fillStyle="rgba(46,160,67,0.08)";ctx.fill();
+                  if(cfLines.proceeds){
+                    ctx.beginPath();
+                    ctx.moveTo(sx(cashFlow.cIn[0].date),h);
+                    cashFlow.cIn.forEach((p,i)=>{
+                      if(i>0) ctx.lineTo(sx(p.date),sy(cashFlow.cIn[i-1].val));
+                      ctx.lineTo(sx(p.date),sy(p.val));
+                    });
+                    ctx.lineTo(sx(cashFlow.cIn[cashFlow.cIn.length-1].date),h);
+                    ctx.closePath();
+                    ctx.fillStyle="rgba(46,160,67,0.08)";ctx.fill();
+                  }
                   // Step lines for cumulative flows
                   const drawStep=(series,color,lw,dash)=>{
                     ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.setLineDash(dash||[]);
@@ -2381,11 +2452,11 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                     });
                     ctx.stroke();ctx.setLineDash([]);
                   };
-                  drawStep(cashFlow.cIn,C.green,2);
-                  drawStep(cashFlow.cOut,"#C0392B",2);
-                  drawStep(cashFlow.cProj,C.muted,1.5,[6,4]);
+                  if(cfLines.proceeds) drawStep(cashFlow.cIn,C.green,2);
+                  if(cfLines.actual) drawStep(cashFlow.cOut,"#C0392B",2);
+                  if(cfLines.projected) drawStep(cashFlow.cProj,C.muted,1.5,[6,4]);
                   // Draw down overlay
-                  if(showDrawdown){
+                  if(cfLines.drawdown){
                     const drawLine=(series,color,lw,dash)=>{
                       ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.setLineDash(dash||[]);
                       series.forEach((p,i)=>{if(i===0)ctx.moveTo(sx(p.date),sy(p.val));else ctx.lineTo(sx(p.date),sy(p.val));});
@@ -5117,6 +5188,7 @@ export default function App() {
 
   const updateProject=(id,fn)=>setProjects(prev=>prev.map(p=>p.id===id?fn(p):p));
   const updateTask=(id,fn)=>setTasks(prev=>prev.map(t=>t.id===id?fn(t):t));
+  const deleteTask=id=>{setTasks(prev=>prev.filter(t=>t.id!==id));sbDel("tasks",id).catch(console.error);};
 
   const updateQuote=(id,fn,newQuote)=>{
     if(newQuote){
@@ -5265,7 +5337,7 @@ export default function App() {
 
       {/* Main area */}
       <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} initialTaskId={page?.taskId||null} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
+        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} initialTaskId={page?.taskId||null} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onDeleteTask={deleteTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
           {view==="dashboard"&&<Dashboard projects={projects} phases={phases} tasks={tasks} expenses={expenses} events={events} proceeds={proceeds} onNavigate={navigate}/>}
