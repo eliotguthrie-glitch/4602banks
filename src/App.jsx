@@ -1238,6 +1238,8 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
   const [activeTaskId,setActiveTaskId]=useState(initialTaskId||null);
   const [editing,setEditing]=useState(false);
   const [addingTask,setAddingTask]=useState(false);
+  const [expTasks,setExpTasks]=useState(new Set());
+  const toggleExp=id=>setExpTasks(prev=>{const s=new Set(prev);if(s.has(id))s.delete(id);else s.add(id);return s;});
   const projectTaskRef=useRef(null);
   const [editForm,setEditForm]=useState({name:phase.name,status:phase.status,target_budget:phase.target_budget||phase.budget||0,contingency:phase.contingency||0,start:phase.start,end:phase.end,notes:phase.notes||"",datesMode:phase.datesMode||"manual",phase_id:phase.phase_id||""});
   const [confirmDelete,setConfirmDelete]=useState(false);
@@ -1420,24 +1422,50 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
                 <button onClick={()=>setAddingTask(true)} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>+ Add task</button>
               </div>
             </div>
-            {projectTasks.filter(t=>!t.parent_task_id).map((t,i)=>(
-              <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<projectTasks.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-              >
-                <CheckBox done={t.status==="complete"} onClick={e=>{e.stopPropagation();onUpdateTask(t.id,x=>({...x,status:x.status==="complete"?"todo":"complete"}));}}/>
-                <div style={{flex:1,minWidth:0}} onClick={()=>setActiveTaskId(t.id)}>
-                  <p style={{fontSize:13,color:t.status==="complete"?C.muted:C.text,textDecoration:t.status==="complete"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
-                  <p style={{fontSize:11,color:C.muted,marginTop:1}}>
-                    {t.start?fmtD(t.start)+" → "+(t.end?fmtD(t.end):"…"):"No date"}
-                    {(()=>{const sc=tasks.filter(x=>x.parent_task_id===t.id);return sc.length>0?<span style={{marginLeft:6,color:C.faint}}>{sc.filter(x=>x.status==="complete").length}/{sc.length} subtasks</span>:null;})()}
-                  </p>
+            {projectTasks.filter(t=>!t.parent_task_id).map((t,i,arr)=>{
+              const subs=tasks.filter(x=>x.parent_task_id===t.id);
+              const hasSubs=subs.length>0;
+              const isExp=expTasks.has(t.id);
+              return (
+                <Fragment key={t.id}>
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:(i<arr.length-1||isExp)?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  {hasSubs?(
+                    <button onClick={e=>{e.stopPropagation();toggleExp(t.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",flexShrink:0,width:16,justifyContent:"center"}}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{transform:isExp?"rotate(90deg)":"rotate(0deg)",transition:"transform 0.15s"}}><path d="M6 4l4 4-4 4" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  ):(
+                    <CheckBox done={t.status==="complete"} onClick={e=>{e.stopPropagation();onUpdateTask(t.id,x=>({...x,status:x.status==="complete"?"todo":"complete"}));}}/>
+                  )}
+                  <div style={{flex:1,minWidth:0}} onClick={()=>setActiveTaskId(t.id)}>
+                    <p style={{fontSize:13,color:t.status==="complete"?C.muted:C.text,textDecoration:t.status==="complete"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
+                    <p style={{fontSize:11,color:C.muted,marginTop:1}}>
+                      {t.start?fmtD(t.start)+" → "+(t.end?fmtD(t.end):"…"):"No date"}
+                      {hasSubs&&<span style={{marginLeft:6,color:C.faint}}>{subs.filter(x=>x.status==="complete").length}/{subs.length} subtasks</span>}
+                    </p>
+                  </div>
+                  <Avatar name={t.assignee}/>
+                  <Chip status={t.status}/>
+                  {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks,quotes))}</span>}{((t.photos||[]).length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{(t.photos||[]).length>0?"📷":""}{t.notes?"📝":""}</span>}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
-                <Avatar name={t.assignee}/>
-                <Chip status={t.status}/>
-                {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks,quotes))}</span>}{((t.photos||[]).length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{(t.photos||[]).length>0?"📷":""}{t.notes?"📝":""}</span>}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-            ))}
+                {isExp&&subs.map((st,si)=>(
+                  <div key={st.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 16px 8px 44px",borderBottom:si<subs.length-1?`1px solid ${C.divider}`:(i<arr.length-1?`1px solid ${C.divider}`:"none"),background:C.bg,cursor:"pointer"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" style={{flexShrink:0,opacity:0.25}}><path d="M2 0v6h6" stroke={C.muted} strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+                    <CheckBox done={st.status==="complete"} onClick={e=>{e.stopPropagation();onUpdateTask(st.id,x=>({...x,status:x.status==="complete"?"todo":"complete"}));}}/>
+                    <div style={{flex:1,minWidth:0}} onClick={()=>setActiveTaskId(st.id)}>
+                      <p style={{fontSize:12,color:st.status==="complete"?C.muted:C.text,textDecoration:st.status==="complete"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.title}</p>
+                      {st.start&&<p style={{fontSize:10,color:C.faint,marginTop:1}}>{fmtD(st.start)} → {fmtD(st.end)}</p>}
+                    </div>
+                    {st.assignee&&<Avatar name={st.assignee} size={18}/>}
+                    {(st.price||0)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(st.price)}</span>}
+                    <Chip status={st.status}/>
+                  </div>
+                ))}
+                </Fragment>
+              );
+            })}
             {addingTask&&(
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderTop:`1px solid ${C.divider}`}}>
                 <div style={{width:15,height:15,borderRadius:3,flexShrink:0,border:"1.5px solid "+C.faint}}/>
@@ -2295,19 +2323,33 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
       const dd=Math.round(((e.clientX-drag.startX)/drag.bw)*projDays);
       if(drag.kind==="task"){
         let tipText="";
-        setTasks(prev=>prev.map(t=>{
-          if(t.id!==drag.id)return t;
-          if(!drag.origStart||!drag.origEnd)return t;
-          if(drag.type==="move"){
-            const ns=addDays(drag.origStart,dd),ne=addDays(drag.origEnd,dd);
-            tipText=`${fmtDow(ns)} → ${fmtDow(ne)}`;
-            return{...t,start:ns,end:ne};
+        setTasks(prev=>{
+          const updated=prev.map(t=>{
+            if(t.id!==drag.id)return t;
+            if(!drag.origStart||!drag.origEnd)return t;
+            if(drag.type==="move"){
+              const ns=addDays(drag.origStart,dd),ne=addDays(drag.origEnd,dd);
+              tipText=`${fmtDow(ns)} → ${fmtDow(ne)}`;
+              return{...t,start:ns,end:ne};
+            }
+            const ne=addDays(drag.origEnd,dd);
+            const clamped=ne>drag.origStart?ne:addDays(drag.origStart,1);
+            tipText=`${fmtDow(drag.origStart)} → ${fmtDow(clamped)}`;
+            return{...t,end:clamped};
+          });
+          // Live-update parent dates when dragging subtask
+          const dragged=updated.find(t=>t.id===drag.id);
+          if(dragged?.parent_task_id){
+            const pid=dragged.parent_task_id;
+            const sibs=updated.filter(t=>t.parent_task_id===pid&&t.start&&t.end);
+            if(sibs.length){
+              const pStart=sibs.reduce((m,s)=>s.start<m?s.start:m,sibs[0].start);
+              const pEnd=sibs.reduce((m,s)=>s.end>m?s.end:m,sibs[0].end);
+              return updated.map(t=>t.id===pid?{...t,start:pStart,end:pEnd}:t);
+            }
           }
-          const ne=addDays(drag.origEnd,dd);
-          const clamped=ne>drag.origStart?ne:addDays(drag.origStart,1);
-          tipText=`${fmtDow(drag.origStart)} → ${fmtDow(clamped)}`;
-          return{...t,end:clamped};
-        }));
+          return updated;
+        });
         setDragTip({x:e.clientX,y:e.clientY,text:tipText});
       } else if(drag.kind==="proceed"){
         const nd=addDays(drag.origDate,dd);
@@ -2326,7 +2368,22 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           let ns=drag.origStart,ne=drag.origEnd;
           if(drag.type==="move"){ns=addDays(drag.origStart,dd);ne=addDays(drag.origEnd,dd);}
           else{ne=addDays(drag.origEnd,dd);if(ne<=drag.origStart)ne=addDays(drag.origStart,1);}
-          setTasks(prev=>prev.map(t=>t.id===drag.id?{...t,start:ns,end:ne}:t));
+          setTasks(prev=>{
+            const updated=prev.map(t=>t.id===drag.id?{...t,start:ns,end:ne}:t);
+            // If subtask, recalc parent dates from all its siblings
+            const dragged=updated.find(t=>t.id===drag.id);
+            if(dragged?.parent_task_id){
+              const pid=dragged.parent_task_id;
+              const sibs=updated.filter(t=>t.parent_task_id===pid&&t.start&&t.end);
+              if(sibs.length){
+                const pStart=sibs.reduce((m,s)=>s.start<m?s.start:m,sibs[0].start);
+                const pEnd=sibs.reduce((m,s)=>s.end>m?s.end:m,sibs[0].end);
+                sbPatch("tasks",pid,{start_date:pStart,end_date:pEnd}).catch(console.error);
+                return updated.map(t=>t.id===pid?{...t,start:pStart,end:pEnd}:t);
+              }
+            }
+            return updated;
+          });
           sbPatch("tasks",drag.id,{start_date:ns,end_date:ne}).catch(console.error);
         } else if(drag.kind==="proceed"){
           const nd=addDays(drag.origDate,dd);
@@ -2890,9 +2947,20 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                           {(st.price||0)>0&&<div style={{fontSize:10,color:C.faint,fontVariantNumeric:"tabular-nums",marginTop:1}}>{fmtM(st.price)}</div>}
                         </div>
                       </div>
-                      <div style={{flex:1,position:"relative",minHeight:28,display:"flex",alignItems:"center"}}>
+                      <div style={{flex:1,position:"relative",minHeight:28,display:"flex",alignItems:"center",overflow:"visible"}}>
                         <Grid/>
-                        {!sUndated&&<div style={{position:"absolute",left:`${sL}%`,width:`${sW}%`,height:14,background:col,borderRadius:2,opacity:sDone?0.25:0.45}}/>}
+                        <div onMouseDown={e=>onDown(e,st.id,"move")}
+                          onMouseEnter={()=>setHoverTaskId(st.id)} onMouseLeave={()=>setHoverTaskId(null)}
+                          style={{position:"absolute",left:`${sL}%`,width:`${sW}%`,height:14,
+                            background:sUndated?"transparent":col,
+                            border:sUndated?`1.5px dashed ${col}`:"none",
+                            borderRadius:2,opacity:drag?.id===st.id?0.65:(sDone?0.25:0.5),
+                            cursor:drag?.id===st.id&&drag?.type==="move"?"grabbing":"grab",
+                            zIndex:hoverTaskId===st.id?3:2,
+                            boxShadow:drag?.id===st.id?`0 0 0 2px ${col}44`:"none"}}>
+                          {!sUndated&&<div onMouseDown={e=>onDown(e,st.id,"resize")} style={{position:"absolute",right:0,top:0,bottom:0,width:6,cursor:"ew-resize"}}/>}
+                        </div>
+                        {drag?.id===st.id&&<div style={{position:"absolute",left:`${sL}%`,top:-22,background:C.text,color:"white",fontSize:10,padding:"2px 6px",borderRadius:3,whiteSpace:"nowrap",pointerEvents:"none",zIndex:20,fontVariantNumeric:"tabular-nums"}}>{fmtD(sStart)} → {fmtD(sEnd)} · {daysBetween(sStart,sEnd)}d</div>}
                       </div>
                     </div>
                   );
