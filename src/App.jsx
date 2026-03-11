@@ -2985,7 +2985,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
       </div>
 
       {/* ── Side peek panels ─────────────────────────────────── */}
-      {peek?.type==="task"&&<PeekPanel taskId={peek.id} tasks={tasks} setTasks={setTasks} projects={projects} team={team} quotes={quotes} onClose={()=>setPeek(null)} onNavigate={onNavigate} onDeleteTask={onDeleteTask}/>}
+      {peek?.type==="task"&&<PeekPanel taskId={peek.id} tasks={tasks} setTasks={setTasks} projects={projects} team={team} quotes={quotes} onClose={()=>setPeek(null)} onNavigate={onNavigate} onDeleteTask={onDeleteTask} onUpdateQuote={updateQuote}/>}
       {peek?.type==="proceed"&&<ProceedPeek id={peek.id} proceeds={proceeds} setProceeds={setProceeds} onClose={()=>setPeek(null)}/>}
       {peek?.type==="event"&&<EventPeek id={peek.id} events={events} setEvents={setEvents} onClose={()=>setPeek(null)}/>}
       {peek?.type==="project"&&<ProjectPeek id={peek.id} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onClose={()=>setPeek(null)} onNavigate={onNavigate} quotes={quotes}/>}
@@ -3014,9 +3014,11 @@ function AddSubtaskInline({parentId,projectId,setTasks}){
   </div>;
 }
 
-function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigate,onDeleteTask}){
+function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigate,onDeleteTask,onUpdateQuote}){
   const t=tasks.find(x=>x.id===taskId);
   const ph=t?projects.find(p=>p.id===t.project_id):null;
+  const taskQuote=(quotes||[]).find(q=>q.task_id===taskId);
+  const [peekTab,setPeekTab]=useState("detail"); // "detail" | "quotes"
   const [dirty,setDirty]=useState(false);
   const [saved,setSaved]=useState(false);
   const [saving,setSaving]=useState(false);
@@ -3061,10 +3063,16 @@ function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigat
             <div style={{width:7,height:7,borderRadius:2,background:pc(ph.id)}}/>
             <span style={{fontSize:12,color:C.muted}}>{ph.name}</span>
           </div>:<span style={{fontSize:12,color:C.muted,fontStyle:"italic"}}>No project assigned</span>}
+          <div style={{display:"flex",gap:0,marginTop:12,borderBottom:`1px solid ${C.border}`}}>
+            {[{id:"detail",label:"Detail"},{id:"quotes",label:"Quotes"+(taskQuote?" ✓":"")}].map(tab=>(
+              <button key={tab.id} onClick={()=>setPeekTab(tab.id)}
+                style={{padding:"6px 14px",fontSize:12,fontWeight:peekTab===tab.id?600:400,color:peekTab===tab.id?C.accent:C.muted,background:"none",border:"none",borderBottom:peekTab===tab.id?`2px solid ${C.accent}`:"2px solid transparent",cursor:"pointer",marginBottom:-1}}>{tab.label}</button>
+            ))}
+          </div>
         </div>
         {/* Body */}
         <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
-          <div style={{marginBottom:20}}>
+          {peekTab==="detail"&&<><div style={{marginBottom:20}}>
             <p style={{fontSize:11,color:C.muted,fontWeight:500,marginBottom:6}}>Status</p>
             <div style={{display:"flex",gap:4}}>
               {["todo","in_progress","complete"].map(s=>(
@@ -3173,6 +3181,35 @@ function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigat
           <div style={{display:"flex",gap:8}}>
             <Btn onClick={()=>{onClose();onNavigate("project",t.project_id,t.id);}}>Open full page</Btn>
           </div>
+          </>}
+          {peekTab==="quotes"&&(
+            <div>
+              {taskQuote ? (
+                <QuoteComparison
+                  quote={taskQuote}
+                  phaseName={t.title}
+                  onUpdate={fn=>onUpdateQuote&&onUpdateQuote(taskQuote.id,fn)}
+                  onAward={total=>{
+                    if(total!==null){
+                      setTasks(prev=>prev.map(x=>x.id===taskId?{...x,price:total}:x));
+                      sbPatch("tasks",taskId,{price:total}).catch(console.error);
+                    }
+                  }}
+                />
+              ) : (
+                <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>
+                  <p style={{fontSize:13,marginBottom:4}}>No quote comparison for this task.</p>
+                  <p style={{fontSize:12,color:C.faint,marginBottom:16}}>Compare bids from multiple contractors side by side.</p>
+                  {onUpdateQuote&&<Btn variant="primary" onClick={()=>{
+                    const newQ={id:uid(),project_id:t.project_id,task_id:taskId,awarded_to:null,notes:"",
+                      contractors:[{id:uid(),name:"Contractor 1",phone:"",email:"",sort_order:0}],
+                      items:[{id:uid(),label:"Labor",amounts:{}},{id:uid(),label:"Materials",amounts:{}}]};
+                    onUpdateQuote(null,null,newQ);
+                  }}>+ Add quote comparison</Btn>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {/* Footer save bar */}
         <div style={{padding:"12px 24px",borderTop:`1px solid ${C.border}`,flexShrink:0,display:"flex",alignItems:"center",gap:10,background:C.surface}}>
@@ -4409,11 +4446,18 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
           onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect="move";setDropTarget({type:"group",key:grp.key});}}
           onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropTarget(prev=>prev?.type==="group"&&prev.key===grp.key?null:prev);}}
           onDrop={e=>onDropGroup(e,grp.key)}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            {grp.color ? <div style={{width:8,height:8,borderRadius:2,background:grp.color}}/> : <Avatar name={grp.label} size={18}/>}
-            <span style={{fontSize:12,fontWeight:600,color:C.text}}>{grp.label}</span>
-            <span style={{fontSize:11,color:C.faint}}>{grp.items.length}</span>
-          </div>
+          {(()=>{
+            const grpEst=grp.items.reduce((s,t)=>s+taskTotalEst(t,tasks,quotes),0);
+            const grpAct=grp.items.reduce((s,t)=>s+taskTotalAct(t,tasks),0);
+            return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              {grp.color ? <div style={{width:8,height:8,borderRadius:2,background:grp.color}}/> : <Avatar name={grp.label} size={18}/>}
+              <span style={{fontSize:12,fontWeight:600,color:C.text}}>{grp.label}</span>
+              <span style={{fontSize:11,color:C.faint}}>{grp.items.length}</span>
+              <span style={{marginLeft:"auto"}}/>
+              {grpEst>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>Est {fmtM(grpEst)}</span>}
+              {grpAct>0&&<span style={{fontSize:11,color:grpAct>grpEst&&grpEst>0?"#c33":C.green,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>Act {fmtM(grpAct)}</span>}
+            </div>;
+          })()}
           <div style={{border:`1px solid ${isGroupDrop&&dragId?C.accent:C.border}`,borderRadius:8,overflow:"hidden",background:C.surface,transition:"border-color 0.15s"}}>
             {grp.items.map((t,i)=>{
               const ph=projects.find(p=>p.id===t.project_id);
@@ -5097,11 +5141,16 @@ function ProjectsView({phases, projects, setProjects, tasks, expenses, onNavigat
           <p style={{fontSize:13,fontWeight:500,color:C.text}}>{pr.name}</p>
           <p style={{fontSize:11,color:C.muted,marginTop:1}}>{fmtD(pr.start)} → {fmtD(pr.end)}</p>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-          <span style={{fontSize:12,color:C.muted}}>{done}/{projectTasks.length} tasks</span>
-          <span style={{fontSize:12,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(pr.target_budget||pr.budget||0)}</span>
-          {!bulkMode&&<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-        </div>
+        {(()=>{
+          const est=projectTasks.filter(t=>!t.parent_task_id).reduce((s,t)=>s+taskTotalEst(t,tasks,quotes),0);
+          const act=projectTasks.filter(t=>!t.parent_task_id).reduce((s,t)=>s+taskTotalAct(t,tasks),0);
+          return <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+            <span style={{fontSize:12,color:C.muted}}>{done}/{projectTasks.length} tasks</span>
+            {est>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>Est {fmtM(est)}</span>}
+            {act>0&&<span style={{fontSize:11,color:act>est&&est>0?"#c33":C.green,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>Act {fmtM(act)}</span>}
+            {!bulkMode&&<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </div>;
+        })()}
       </div>
     );
   };
