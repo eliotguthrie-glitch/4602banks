@@ -48,6 +48,13 @@ const sbDel = (table, id) => {
   if(_isDev()) return Promise.resolve(null);
   return sbFetch("/rest/v1/"+table+"?id=eq."+id, {method:"DELETE"});
 };
+const searchMaterial = (query) => {
+  return fetch(SB_URL+"/functions/v1/material-search", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":"Bearer "+(AUTH_TOKEN||SB_KEY),"apikey":SB_KEY},
+    body:JSON.stringify({query, location:"New Orleans, LA"}),
+  }).then(r=>r.json());
+};
 
 // DB → app field mappers
 const mapProject   = p => ({...p, start:p.start_date, end:p.end_date, budget:p.target_budget||p.budget||0, target_budget:p.target_budget||p.budget||0, contingency:p.contingency||0, photos:[]});
@@ -264,6 +271,15 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
     if(!quote.contractors.length) return null;
     return quote.contractors.reduce((a,b)=>(totals[a.id]||Infinity)<=(totals[b.id]||Infinity)?a:b).id;
   },[totals,quote.contractors]);
+  const avg = useMemo(()=>{
+    const vals=quote.contractors.map(c=>totals[c.id]||0).filter(v=>v>0);
+    return vals.length?Math.round(vals.reduce((s,v)=>s+v,0)/vals.length):0;
+  },[totals,quote.contractors]);
+
+  // Push average as estimate when no award yet and there are quotes with amounts
+  useEffect(()=>{
+    if(!quote.awarded_to && avg>0 && onAward) onAward(avg);
+  },[avg,quote.awarded_to]);
 
   const updQ = fn => onUpdate(q=>fn(q));
 
@@ -290,10 +306,8 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
     const isUnawarding = id===null||quote.awarded_to===id;
     const newAwarded = isUnawarding?null:id;
     updQ(q=>({...q,awarded_to:newAwarded}));
-    if(onAward) onAward(isUnawarding?null:(totals[id]||0));
+    if(onAward) onAward(isUnawarding?avg:(totals[id]||0));
   };
-
-  const colW = 130;
 
   return (
     <div>
@@ -305,96 +319,95 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
         </div>
       </div>
 
-      <div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-          <thead>
-            <tr style={{background:C.bg}}>
-              <th style={{padding:"10px 14px",textAlign:"left",borderBottom:`1px solid ${C.border}`,fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",width:180}}>Line item</th>
-              {quote.contractors.map(c=>(
-                <th key={c.id} style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,minWidth:colW,verticalAlign:"top"}}>
-                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,justifyContent:"space-between"}}>
-                      <input value={c.name} onChange={e=>updateContractor(c.id,"name",e.target.value)}
-                        style={{fontWeight:600,fontSize:13,color:C.text,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit"}}/>
-                      <button onClick={()=>removeContractor(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:12,flexShrink:0}}>✕</button>
+      {/* Average estimate banner */}
+      {!quote.awarded_to&&avg>0&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#EEF2FF",borderRadius:8,marginBottom:14,border:"1px solid #D4DBFF"}}>
+          <span style={{fontSize:12,color:"#4F5B93",fontWeight:500}}>Avg estimate from {quote.contractors.filter(c=>(totals[c.id]||0)>0).length} quote{quote.contractors.filter(c=>(totals[c.id]||0)>0).length!==1?"s":""}:</span>
+          <span style={{fontSize:14,fontWeight:700,color:"#4F5B93",fontVariantNumeric:"tabular-nums"}}>{fmtM(avg)}</span>
+          <span style={{fontSize:11,color:"#8B95C0"}}>used as task estimate until awarded</span>
+        </div>
+      )}
+
+      {/* Contractor cards layout */}
+      <div style={{display:"grid",gridTemplateColumns:`repeat(${quote.contractors.length},1fr)`,gap:12,marginBottom:16}}>
+        {quote.contractors.map(c=>{
+          const total=totals[c.id]||0;
+          const isLow=c.id===lowestId&&quote.contractors.length>1&&total>0;
+          const awarded=quote.awarded_to===c.id;
+          return (
+            <div key={c.id} style={{border:`2px solid ${awarded?"#A3D9B8":isLow?C.green:C.border}`,borderRadius:10,background:awarded?C.greenBg:C.surface,overflow:"hidden",transition:"border-color 0.15s"}}>
+              {/* Contractor header */}
+              <div style={{padding:"12px 14px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <input value={c.name} onChange={e=>updateContractor(c.id,"name",e.target.value)}
+                    style={{fontWeight:700,fontSize:14,color:C.text,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit",padding:0}}/>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,marginTop:4}}>
+                    <input value={c.phone||""} onChange={e=>updateContractor(c.id,"phone",e.target.value)} placeholder="Phone"
+                      style={{fontSize:11,color:C.muted,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit",padding:0}}/>
+                    <input value={c.email||""} onChange={e=>updateContractor(c.id,"email",e.target.value)} placeholder="Email"
+                      style={{fontSize:11,color:C.muted,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit",padding:0}}/>
+                  </div>
+                </div>
+                <button onClick={()=>removeContractor(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:12,flexShrink:0,padding:"0 2px"}}>✕</button>
+              </div>
+
+              {/* Line items */}
+              {quote.items.map((item,ri)=>{
+                const val=item.amounts[c.id]||0;
+                return (
+                  <div key={item.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",borderBottom:ri<quote.items.length-1?`1px solid ${C.divider}`:"none"}}>
+                    <span style={{fontSize:12,color:C.muted,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:2,flexShrink:0}}>
+                      <span style={{fontSize:11,color:C.faint}}>$</span>
+                      <input type="text" defaultValue={val?fmtN(val):""} placeholder="0.00"
+                        onFocus={e=>{e.target.value=val||"";e.target.select();}}
+                        onBlur={e=>{const v=parseMoney(e.target.value);e.target.value=v?fmtN(v):"";setAmount(item.id,c.id,v);}}
+                        style={{width:72,textAlign:"right",fontSize:13,fontVariantNumeric:"tabular-nums",color:C.text,border:"none",background:"transparent",outline:"none",fontFamily:"inherit",padding:0}}/>
                     </div>
-                    <input value={c.phone} onChange={e=>updateContractor(c.id,"phone",e.target.value)} placeholder="Phone"
-                      style={{fontSize:11,color:C.muted,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit"}}/>
-                    <input value={c.email} onChange={e=>updateContractor(c.id,"email",e.target.value)} placeholder="Email"
-                      style={{fontSize:11,color:C.muted,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit"}}/>
                   </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {quote.items.map((item,ri)=>(
-              <tr key={item.id} style={{borderBottom:`1px solid ${C.divider}`}}
-                onMouseEnter={e=>e.currentTarget.style.background=C.hover}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-              >
-                <td style={{padding:"8px 14px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <input value={item.label} onChange={e=>updateItemLabel(item.id,e.target.value)}
-                      style={{fontSize:13,color:C.text,border:"none",background:"transparent",outline:"none",fontFamily:"inherit",width:"100%"}}/>
-                    <button onClick={()=>removeItem(item.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:11,flexShrink:0,opacity:0}}
-                      onMouseEnter={e=>e.target.style.opacity=1} onMouseLeave={e=>e.target.style.opacity=0}>✕</button>
-                  </div>
-                </td>
-                {quote.contractors.map(c=>{
-                  const val=item.amounts[c.id]||0;
-                  const isLowest=quote.contractors.length>1&&val===Math.min(...quote.contractors.map(x=>item.amounts[x.id]||0))&&val>0;
-                  return (
-                    <td key={c.id} style={{padding:"8px 12px",textAlign:"right"}}>
-                      <div style={{position:"relative",display:"inline-flex",alignItems:"center"}}>
-                        <span style={{fontSize:12,color:C.muted,marginRight:2}}>$</span>
-                        <input type="number" value={val||""} onChange={e=>setAmount(item.id,c.id,e.target.value)}
-                          style={{width:80,textAlign:"right",fontSize:13,fontVariantNumeric:"tabular-nums",color:isLowest?C.green:C.text,fontWeight:isLowest?600:400,border:"none",background:"transparent",outline:"none",fontFamily:"inherit"}}/>
-                        {isLowest&&<span style={{fontSize:9,color:C.green,marginLeft:2}}>↓</span>}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-
-            {/* Totals */}
-            <tr style={{background:C.bg,borderTop:`2px solid ${C.border}`}}>
-              <td style={{padding:"11px 14px",fontWeight:600,fontSize:13,color:C.text}}>Total</td>
-              {quote.contractors.map(c=>{
-                const total=totals[c.id]||0;
-                const isLow=c.id===lowestId&&quote.contractors.length>1;
-                return (
-                  <td key={c.id} style={{padding:"11px 12px",textAlign:"right",fontWeight:700,fontSize:14,fontVariantNumeric:"tabular-nums",color:isLow?C.green:C.text}}>
-                    {fmtM(total)} {isLow&&<span style={{fontSize:10}}>↓ lowest</span>}
-                  </td>
                 );
               })}
-            </tr>
 
-            {/* Award row */}
-            <tr style={{borderTop:`1px solid ${C.divider}`}}>
-              <td style={{padding:"10px 14px",fontSize:12,color:C.muted}}>Award</td>
-              {quote.contractors.map(c=>{
-                const awarded=quote.awarded_to===c.id;
-                return (
-                  <td key={c.id} style={{padding:"10px 12px",textAlign:"right"}}>
-                    <button onClick={()=>award(c.id)} style={{
-                      padding:"5px 10px",fontSize:12,fontWeight:500,borderRadius:4,cursor:"pointer",
-                      background:awarded?C.greenBg:"transparent",
-                      color:awarded?C.green:C.muted,
-                      border:`1px solid ${awarded?"#A3D9B8":C.border}`,
-                    }}>{awarded?"✓ Awarded":"Award"}</button>
-                  </td>
-                );
-              })}
-            </tr>
-          </tbody>
-        </table>
+              {/* Total + award */}
+              <div style={{padding:"10px 14px",background:isLow?"rgba(46,160,67,0.06)":C.bg,borderTop:`2px solid ${C.border}`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.04em"}}>Total</span>
+                  <span style={{fontSize:16,fontWeight:700,color:isLow?C.green:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(total)}</span>
+                </div>
+                {isLow&&<p style={{fontSize:10,color:C.green,fontWeight:600,marginBottom:6,textAlign:"right"}}>↓ Lowest bid</p>}
+                <button onClick={()=>award(c.id)} style={{
+                  width:"100%",padding:"7px 0",fontSize:12,fontWeight:600,borderRadius:6,cursor:"pointer",
+                  background:awarded?C.green:"transparent",
+                  color:awarded?"#fff":C.muted,
+                  border:awarded?"none":`1px solid ${C.border}`,
+                  transition:"all 0.15s",
+                }}>{awarded?"✓ Awarded":"Award"}</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Line items editor */}
+      <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",marginBottom:16}}>
+        <div style={{padding:"8px 14px",background:C.bg,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.04em"}}>Line Items</span>
+          <button onClick={addItem} style={{fontSize:11,color:C.accent,background:"none",border:"none",cursor:"pointer",fontWeight:500}}>+ Add</button>
+        </div>
+        {quote.items.map((item,i)=>(
+          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderBottom:i<quote.items.length-1?`1px solid ${C.divider}`:"none"}}
+            onMouseEnter={e=>e.currentTarget.querySelector(".rm").style.opacity=1}
+            onMouseLeave={e=>e.currentTarget.querySelector(".rm").style.opacity=0}>
+            <input value={item.label} onChange={e=>updateItemLabel(item.id,e.target.value)}
+              style={{flex:1,fontSize:13,color:C.text,border:"none",background:"transparent",outline:"none",fontFamily:"inherit",padding:0}}/>
+            <button className="rm" onClick={()=>removeItem(item.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:11,flexShrink:0,opacity:0,transition:"opacity 0.1s"}}>✕</button>
+          </div>
+        ))}
+        {quote.items.length===0&&<p style={{padding:"12px 14px",fontSize:12,color:C.faint}}>No line items yet.</p>}
       </div>
 
       {/* Notes */}
-      <div style={{marginTop:16}}>
+      <div>
         <p style={{fontSize:11,color:C.muted,marginBottom:6,fontWeight:500}}>Notes</p>
         <NoteField value={quote.notes} onChange={v=>updQ(q=>({...q,notes:v}))} placeholder="Add notes about this bid comparison..." rows={3}/>
       </div>
@@ -497,6 +510,21 @@ function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask, onDele
 function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddTask,onDeleteTask,onUpdateQuote,onAddEvent,team}) {
   const [addedToCalendar, setAddedToCalendar] = useState(false);
   const [taskTab, setTaskTab] = useState("detail"); // "detail" | "quotes"
+  const [matSearch, setMatSearch] = useState({open:false,query:"",loading:false,results:null,error:null});
+  const matSearchRef = useRef(null);
+  const doMatSearch = (q) => {
+    if(!q.trim()) return;
+    setMatSearch(s=>({...s,loading:true,results:null,error:null}));
+    searchMaterial(q.trim()).then(data=>{
+      if(data.error) setMatSearch(s=>({...s,loading:false,error:data.error}));
+      else setMatSearch(s=>({...s,loading:false,results:data.results||[]}));
+    }).catch(e=>setMatSearch(s=>({...s,loading:false,error:e.message})));
+  };
+  const addFromSearch = (r) => {
+    const mats=[...(task.materials||[]),{name:r.product,qty:"1",unit:"ea",cost:String(r.total),actual_cost:"",store:r.store,url:r.url}];
+    onUpdateTask(task.id,t=>({...t,materials:mats}));
+    sbPatch("tasks",task.id,{materials:mats}).catch(console.error);
+  };
   const [editingTitle, setEditingTitle] = useState(false);
   const titleRef = useRef(null);
   const convertToEvent = () => {
@@ -629,10 +657,74 @@ function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddT
                 {(matEstTotal>0||matActTotal>0)&&<span style={{fontSize:11,color:C.muted,fontWeight:500}}>
                   {matEstTotal>0&&<>Est {fmtM(matEstTotal)}</>}{matEstTotal>0&&matActTotal>0&&" · "}{matActTotal>0&&<>Act {fmtM(matActTotal)}</>}
                 </span>}
+                <button onClick={()=>setMatSearch(s=>({...s,open:!s.open,results:null,error:null}))}
+                  style={{fontSize:12,color:"#9B59B6",background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>
+                  <span style={{display:"flex",alignItems:"center",gap:4}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                    Shop AI
+                  </span>
+                </button>
                 <button onClick={()=>onUpdateTask(task.id,t=>({...t,materials:[...(t.materials||[]),{name:"",qty:"",unit:"",cost:"",actual_cost:""}]}))}
                   style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>+ Add</button>
               </div>
             </div>
+            {/* AI Material Search Panel */}
+            {matSearch.open&&(
+              <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,background:"#f8f5ff"}}>
+                <div style={{display:"flex",gap:8,marginBottom:matSearch.results||matSearch.loading||matSearch.error?10:0}}>
+                  <input ref={matSearchRef} value={matSearch.query} onChange={e=>setMatSearch(s=>({...s,query:e.target.value}))}
+                    placeholder='Search materials... e.g. "2x4 lumber" or "kitchen faucet"'
+                    onKeyDown={e=>{if(e.key==="Enter")doMatSearch(matSearch.query);}}
+                    style={{flex:1,border:`1px solid ${C.border}`,borderRadius:6,padding:"8px 12px",fontSize:13,color:C.text,background:C.bg,fontFamily:"inherit",outline:"none"}}
+                    onFocus={e=>e.target.style.borderColor="#9B59B6"} onBlur={e=>e.target.style.borderColor=C.border}/>
+                  <button onClick={()=>doMatSearch(matSearch.query)}
+                    disabled={matSearch.loading}
+                    style={{padding:"8px 16px",fontSize:12,fontWeight:600,borderRadius:6,cursor:matSearch.loading?"wait":"pointer",border:"none",background:"#9B59B6",color:"#fff",opacity:matSearch.loading?0.6:1}}>
+                    {matSearch.loading?"Searching...":"Search"}
+                  </button>
+                </div>
+                {matSearch.loading&&(
+                  <div style={{padding:"16px 0",textAlign:"center"}}>
+                    <p style={{fontSize:12,color:C.muted}}>Searching stores near New Orleans...</p>
+                  </div>
+                )}
+                {matSearch.error&&(
+                  <div style={{padding:"8px 12px",background:"#ffeaea",borderRadius:6,marginBottom:4}}>
+                    <p style={{fontSize:12,color:"#C0392B"}}>{matSearch.error}</p>
+                  </div>
+                )}
+                {matSearch.results&&matSearch.results.length===0&&(
+                  <p style={{fontSize:12,color:C.muted,padding:"8px 0"}}>No results found. Try a different search term.</p>
+                )}
+                {matSearch.results&&matSearch.results.length>0&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {matSearch.results.map((r,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderRadius:6,background:C.surface}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <p style={{fontSize:12,fontWeight:500,color:C.text,marginBottom:2,lineHeight:1.3}}>{r.product}</p>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                            <span style={{fontSize:11,color:"#9B59B6",fontWeight:600}}>{r.store}</span>
+                            {r.in_stock&&<span style={{fontSize:10,color:C.green,fontWeight:500}}>In stock</span>}
+                            {r.in_stock===false&&<span style={{fontSize:10,color:"#C0392B",fontWeight:500}}>Check availability</span>}
+                            {r.notes&&<span style={{fontSize:10,color:C.faint}}>{r.notes}</span>}
+                          </div>
+                        </div>
+                        <div style={{textAlign:"right",flexShrink:0}}>
+                          <p style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{fmtM(r.total)}</p>
+                          <p style={{fontSize:10,color:C.muted}}>{fmtM(r.price)} + {fmtM(r.tax)} tax</p>
+                        </div>
+                        <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+                          <button onClick={()=>addFromSearch(r)} style={{padding:"4px 10px",fontSize:10,fontWeight:600,borderRadius:4,cursor:"pointer",border:"none",background:"#9B59B6",color:"#fff"}}>Add</button>
+                          {r.url&&<a href={r.url} target="_blank" rel="noreferrer" style={{fontSize:10,color:"#9B59B6",textAlign:"center",textDecoration:"none"}}>View</a>}
+                        </div>
+                      </div>
+                    ))}
+                    <p style={{fontSize:10,color:C.faint,textAlign:"center"}}>Prices include 9.45% New Orleans sales tax · AI-sourced, verify before purchasing</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {(task.materials||[]).length>0&&(
               <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 16px",borderBottom:`1px solid ${C.divider}`,background:C.bg}}>
                 <span style={{flex:1,fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>Item</span>
