@@ -163,6 +163,7 @@ const daysBetween = (a,b)=> Math.round((toMs(b)-toMs(a))/86400000);
 const addDays     = (s,n)=> toISO(toMs(s)+n*86400000);
 const datePct     = (d,s,e)=> Math.max(0,Math.min(100,((toMs(d)-toMs(s))/(toMs(e)-toMs(s)))*100));
 const fmtD        = s    => s ? new Date(s+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "—";
+const fmtDow      = s    => s ? new Date(s+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}) : "—";
 const fmtFull     = s    => s ? new Date(s+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : "—";
 const fmtM        = n    => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 const fmtN        = n    => n ? new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n) : "";
@@ -1933,9 +1934,20 @@ function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate}) 
 // ── TIMELINE ───────────────────────────────────────────────────────────────
 const LCOL=250;
 function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,setProceeds,phases,expenses,quotes,updateQuote,team,events,setEvents}) {
-  const pS=PROJECT.start,pE=PROJECT.end,projDays=daysBetween(pS,pE);
+  const [tlRange,setTlRange]=useState({start:PROJECT.start,end:PROJECT.end});
+  const pS=tlRange.start,pE=tlRange.end,projDays=daysBetween(pS,pE)||1;
+  const setRange=(s,e)=>setTlRange({start:s,end:e});
+  const zoomPresets=[
+    {l:"1 mo",fn:()=>{const s=TODAY;setRange(s,addDays(s,30));}},
+    {l:"3 mo",fn:()=>{const s=addDays(TODAY,-15);setRange(s,addDays(s,90));}},
+    {l:"6 mo",fn:()=>{const s=addDays(TODAY,-30);setRange(s,addDays(s,180));}},
+    {l:"All",fn:()=>setRange(PROJECT.start,PROJECT.end)},
+  ];
+  const panLeft=()=>{ const d=Math.max(7,Math.round(projDays*0.25)); setRange(addDays(pS,-d),addDays(pE,-d)); };
+  const panRight=()=>{ const d=Math.max(7,Math.round(projDays*0.25)); setRange(addDays(pS,d),addDays(pE,d)); };
   const containerRef=useRef(null);
   const [drag,setDrag]=useState(null);
+  const [dragTip,setDragTip]=useState(null); // {x,y,text}
   const [groupBy,setGroupBy]=useState("phase"); // "phase" | "assignee" | "all"
   const [hideComplete,setHideComplete]=useState(false);
   const [showCashFlow,setShowCashFlow]=useState(true);
@@ -1976,11 +1988,16 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
     let c=new Date(s.getFullYear(),s.getMonth(),1);
     while(c<=e){
       const iso=`${c.getFullYear()}-${String(c.getMonth()+1).padStart(2,"0")}-01`;
-      res.push({label:c.toLocaleDateString("en-US",{month:"short",year:"2-digit"}),pct:datePct(iso,pS,pE)});
+      // For short ranges (<=60 days), show weeks instead of months
+      if(projDays<=60){
+        res.push({label:c.toLocaleDateString("en-US",{month:"long",year:"numeric"}),pct:datePct(iso,pS,pE)});
+      } else {
+        res.push({label:c.toLocaleDateString("en-US",{month:"short",year:"2-digit"}),pct:datePct(iso,pS,pE)});
+      }
       c=new Date(c.getFullYear(),c.getMonth()+1,1);
     }
     return res;
-  },[]);
+  },[pS,pE,projDays]);
 
   const bw=useCallback(()=>containerRef.current?containerRef.current.getBoundingClientRect().width-LCOL:800,[]);
   const onDown=useCallback((e,id,type)=>{
@@ -2013,19 +2030,29 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
     const mv=e=>{
       const dd=Math.round(((e.clientX-drag.startX)/drag.bw)*projDays);
       if(drag.kind==="task"){
+        let tipText="";
         setTasks(prev=>prev.map(t=>{
           if(t.id!==drag.id)return t;
           if(!drag.origStart||!drag.origEnd)return t;
-          if(drag.type==="move")return{...t,start:addDays(drag.origStart,dd),end:addDays(drag.origEnd,dd)};
+          if(drag.type==="move"){
+            const ns=addDays(drag.origStart,dd),ne=addDays(drag.origEnd,dd);
+            tipText=`${fmtDow(ns)} → ${fmtDow(ne)}`;
+            return{...t,start:ns,end:ne};
+          }
           const ne=addDays(drag.origEnd,dd);
-          return{...t,end:ne>drag.origStart?ne:addDays(drag.origStart,1)};
+          const clamped=ne>drag.origStart?ne:addDays(drag.origStart,1);
+          tipText=`${fmtDow(drag.origStart)} → ${fmtDow(clamped)}`;
+          return{...t,end:clamped};
         }));
+        setDragTip({x:e.clientX,y:e.clientY,text:tipText});
       } else if(drag.kind==="proceed"){
         const nd=addDays(drag.origDate,dd);
         setProceeds(prev=>prev.map(p=>p.id===drag.id?{...p,received_date:nd}:p));
+        setDragTip({x:e.clientX,y:e.clientY,text:fmtDow(nd)});
       } else if(drag.kind==="event"){
         const nd=addDays(drag.origDate,dd);
         setEvents(prev=>prev.map(ev=>ev.id===drag.id?{...ev,date:nd,event_date:nd}:ev));
+        setDragTip({x:e.clientX,y:e.clientY,text:fmtDow(nd)});
       }
     };
     const up=e=>{
@@ -2047,7 +2074,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           sbPatch("events",drag.id,{event_date:nd}).catch(console.error);
         }
       }
-      setDrag(null);
+      setDrag(null);setDragTip(null);
     };
     window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);
     return()=>{window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);};
@@ -2139,11 +2166,24 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
 
   return (
     <div style={{padding:"28px 40px",userSelect:"none",cursor:drag?(drag.type==="resize"?"ew-resize":"grabbing"):"default"}}>
+      {/* Drag date tooltip */}
+      {dragTip&&<div style={{position:"fixed",left:dragTip.x+12,top:dragTip.y-32,background:C.text,color:C.bg,fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>{dragTip.text}</div>}
       {/* Header row */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"baseline",gap:12}}>
           <h2 style={{fontSize:20,fontWeight:700,color:C.text,letterSpacing:"-0.3px"}}>Timeline</h2>
           <span style={{fontSize:12,color:C.faint}}>Drag to move · right edge to resize</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={panLeft} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,padding:"3px 8px",fontSize:13,cursor:"pointer",color:C.muted}}>‹</button>
+          {zoomPresets.map(z=>(
+            <button key={z.l} onClick={z.fn} style={{padding:"3px 10px",fontSize:11,fontWeight:500,borderRadius:5,cursor:"pointer",border:`1px solid ${C.border}`,background:C.surface,color:C.muted}}>{z.l}</button>
+          ))}
+          <button onClick={panRight} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:5,padding:"3px 8px",fontSize:13,cursor:"pointer",color:C.muted}}>›</button>
+          <div style={{width:1,height:16,background:C.divider,margin:"0 4px"}}/>
+          <input type="date" value={pS} onChange={e=>e.target.value&&setRange(e.target.value,pE)} style={{border:`1px solid ${C.border}`,borderRadius:5,padding:"3px 8px",fontSize:11,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
+          <span style={{fontSize:11,color:C.faint}}>→</span>
+          <input type="date" value={pE} onChange={e=>e.target.value&&setRange(pS,e.target.value)} style={{border:`1px solid ${C.border}`,borderRadius:5,padding:"3px 8px",fontSize:11,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"}}/>
         </div>
       </div>
 
