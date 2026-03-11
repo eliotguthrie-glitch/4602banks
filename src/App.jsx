@@ -161,7 +161,7 @@ const EVENTS_SEED = [
   {id:6, date:"2026-08-01",title:"Structural engineer site visit", type:"inspection", project_id:5,   notes:"Re: porch load-bearing assessment.",done:false},
 ];
 
-const TODAY = "2026-03-08";
+const TODAY = new Date().toISOString().slice(0,10);
 
 const EVENT_TYPES = [
   {value:"inspection", label:"Inspection", color:"#9B59B6"},
