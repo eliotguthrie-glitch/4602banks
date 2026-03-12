@@ -65,7 +65,7 @@ const taskTotalEst = (t, allTasks, quotes) => {
   if(!est && quotes){
     const q=(quotes||[]).find(q=>q.task_id===t.id);
     if(q&&q.contractors.length>0){
-      const tots=q.contractors.map(c=>q.items.reduce((s,item)=>s+(item.amounts[c.id]||0),0)).filter(v=>v>0);
+      const tots=q.contractors.map(c=>c.items?(c.items||[]).reduce((s,item)=>s+(item.amount||0),0):(q.items||[]).reduce((s,item)=>s+(item.amounts?.[c.id]||0),0)).filter(v=>v>0);
       if(tots.length) est=Math.round(tots.reduce((s,v)=>s+v,0)/tots.length);
     }
   }
@@ -92,6 +92,9 @@ const C = {
   phase:["#E16A16","#2AA981","#9B59B6","#2980B9","#C0392B","#27AE60"],
 };
 const pc = id => C.phase[(id-1) % C.phase.length];
+const ROLE_COLORS=["#2980B9","#E16A16","#2AA981","#9B59B6","#C0392B","#27AE60","#2383E2","#8E44AD","#D4A017","#16A085"];
+const roleColor=(role)=>{if(!role)return C.faint;let h=0;for(let i=0;i<role.length;i++)h=role.charCodeAt(i)+((h<<5)-h);return ROLE_COLORS[Math.abs(h)%ROLE_COLORS.length];};
+const fmtPhone=(v)=>{const d=v.replace(/\D/g,"").slice(0,10);if(d.length<=3)return d;if(d.length<=6)return`(${d.slice(0,3)})${d.slice(3)}`;return`(${d.slice(0,3)})${d.slice(3,6)}-${d.slice(6)}`;};
 
 // ── Seed data ──────────────────────────────────────────────────────────────
 const PROJECT = {name:"4602 Banks", address:"4602 Banks St, New Orleans LA", total_budget:185000, start:"2026-02-01", end:"2026-11-30"};
@@ -195,11 +198,11 @@ function Chip({status}) {
   return <span style={{background:bg,color,fontSize:11,fontWeight:500,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap"}}>{label}</span>;
 }
 
-function Avatar({name,size=20}) {
-  const cols=["#E16A16","#2AA981","#9B59B6","#2980B9","#C0392B","#27AE60","#2383E2"];
-  const col=cols[name.charCodeAt(0)%cols.length];
+function Avatar({name,size=20,role,team}) {
+  const r=role||(team&&team.find(m=>m.name===name)?.role)||"";
+  const col=r?roleColor(r):C.faint;
   const ini=name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2);
-  return <span title={name} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:size,height:size,borderRadius:"50%",background:col,color:"white",fontSize:size*0.42,fontWeight:700,flexShrink:0}}>{ini}</span>;
+  return <span title={name+(r?" · "+r:"")} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:size,height:size,borderRadius:"50%",background:col,color:"white",fontSize:size*0.42,fontWeight:700,flexShrink:0}}>{ini}</span>;
 }
 
 function CheckBox({done,onClick}) {
@@ -321,10 +324,22 @@ function MatInput({value,onChange,onSelect,allTasks,inputStyle}){
 }
 
 // ── QUOTE COMPARISON ───────────────────────────────────────────────────────
-function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
+// Migrate old shared-items model to per-contractor items
+const migrateQuote = q => {
+  if(!q.contractors.length) return q;
+  // Already migrated if first contractor has items array
+  if(q.contractors[0].items) return q;
+  return {...q, contractors:q.contractors.map(c=>({
+    ...c, items:(q.items||[]).map(item=>({id:uid(),label:item.label,amount:item.amounts?.[c.id]||0}))
+  })), items:[]};
+};
+
+function QuoteComparison({quote:rawQuote,onUpdate,phaseName,onAward,onAwardContractor}) {
+  const quote = useMemo(()=>migrateQuote(rawQuote),[rawQuote]);
+
   const totals = useMemo(()=>{
     const t={};
-    quote.contractors.forEach(c=>{t[c.id]=quote.items.reduce((s,item)=>s+(item.amounts[c.id]||0),0);});
+    quote.contractors.forEach(c=>{t[c.id]=(c.items||[]).reduce((s,item)=>s+(item.amount||0),0);});
     return t;
   },[quote]);
   const lowestId = useMemo(()=>{
@@ -336,50 +351,50 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
     return vals.length?Math.round(vals.reduce((s,v)=>s+v,0)/vals.length):0;
   },[totals,quote.contractors]);
 
-  // Push average as estimate when no award yet and there are quotes with amounts
   useEffect(()=>{
     if(!quote.awarded_to && avg>0 && onAward) onAward(avg);
   },[avg,quote.awarded_to]);
 
-  const updQ = fn => onUpdate(q=>fn(q));
+  // Always write migrated form back
+  const updQ = fn => onUpdate(()=>fn(migrateQuote(rawQuote)));
 
-  const setAmount=(itemId,cId,val)=>{
-    updQ(q=>({...q,items:q.items.map(i=>i.id===itemId?{...i,amounts:{...i.amounts,[cId]:parseFloat(val)||0}}:i)}));
-  };
   const addContractor=()=>{
-    const c={id:uid(),name:"Contractor "+(quote.contractors.length+1),phone:"",email:""};
-    updQ(q=>({...q,contractors:[...q.contractors,c],items:q.items.map(i=>({...i,amounts:{...i.amounts,[c.id]:0}}))}));
+    const c={id:uid(),name:"Contractor "+(quote.contractors.length+1),phone:"",email:"",notes:"",items:[{id:uid(),label:"Labor",amount:0},{id:uid(),label:"Materials",amount:0}]};
+    updQ(q=>({...q,contractors:[...q.contractors,c]}));
   };
   const removeContractor=id=>{
-    updQ(q=>({...q,contractors:q.contractors.filter(c=>c.id!==id),items:q.items.map(i=>{const a={...i.amounts};delete a[id];return{...i,amounts:a};})}));
+    updQ(q=>({...q,contractors:q.contractors.filter(c=>c.id!==id)}));
   };
   const updateContractor=(id,field,val)=>{
     updQ(q=>({...q,contractors:q.contractors.map(c=>c.id===id?{...c,[field]:val}:c)}));
   };
-  const addItem=()=>{
-    const amounts={};quote.contractors.forEach(c=>amounts[c.id]=0);
-    updQ(q=>({...q,items:[...q.items,{id:uid(),label:"New line item",amounts}]}));
+  const addItemTo=(cId)=>{
+    updQ(q=>({...q,contractors:q.contractors.map(c=>c.id===cId?{...c,items:[...(c.items||[]),{id:uid(),label:"New item",amount:0}]}:c)}));
   };
-  const removeItem=id=>updQ(q=>({...q,items:q.items.filter(i=>i.id!==id)}));
-  const updateItemLabel=(id,val)=>updQ(q=>({...q,items:q.items.map(i=>i.id===id?{...i,label:val}:i)}));
+  const removeItemFrom=(cId,itemId)=>{
+    updQ(q=>({...q,contractors:q.contractors.map(c=>c.id===cId?{...c,items:(c.items||[]).filter(i=>i.id!==itemId)}:c)}));
+  };
+  const updateItem=(cId,itemId,field,val)=>{
+    updQ(q=>({...q,contractors:q.contractors.map(c=>c.id===cId?{...c,items:(c.items||[]).map(i=>i.id===itemId?{...i,[field]:val}:i)}:c)}));
+  };
   const award=id=>{
     const isUnawarding = id===null||quote.awarded_to===id;
     const newAwarded = isUnawarding?null:id;
     updQ(q=>({...q,awarded_to:newAwarded}));
     if(onAward) onAward(isUnawarding?avg:(totals[id]||0));
+    if(!isUnawarding&&onAwardContractor){
+      const c=quote.contractors.find(x=>x.id===id);
+      if(c) onAwardContractor({name:c.name,phone:c.phone||"",email:c.email||""});
+    }
   };
 
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
         <p style={{fontSize:13,fontWeight:600,color:C.text}}>Quote Comparison — {phaseName}</p>
-        <div style={{display:"flex",gap:8}}>
-          <Btn onClick={addItem}>+ Line item</Btn>
-          <Btn onClick={addContractor} variant="primary">+ Contractor</Btn>
-        </div>
+        <Btn onClick={addContractor} variant="primary">+ Contractor</Btn>
       </div>
 
-      {/* Average estimate banner */}
       {!quote.awarded_to&&avg>0&&(
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#EEF2FF",borderRadius:8,marginBottom:14,border:"1px solid #D4DBFF"}}>
           <span style={{fontSize:12,color:"#4F5B93",fontWeight:500}}>Avg estimate from {quote.contractors.filter(c=>(totals[c.id]||0)>0).length} quote{quote.contractors.filter(c=>(totals[c.id]||0)>0).length!==1?"s":""}:</span>
@@ -388,21 +403,22 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
         </div>
       )}
 
-      {/* Contractor cards layout */}
-      <div style={{display:"grid",gridTemplateColumns:`repeat(${quote.contractors.length},1fr)`,gap:12,marginBottom:16}}>
+      {/* Contractor cards */}
+      <div className="contractor-grid" style={{gridTemplateColumns:`repeat(${Math.min(quote.contractors.length,3)},1fr)`,marginBottom:16}}>
         {quote.contractors.map(c=>{
           const total=totals[c.id]||0;
           const isLow=c.id===lowestId&&quote.contractors.length>1&&total>0;
           const awarded=quote.awarded_to===c.id;
+          const items=c.items||[];
           return (
-            <div key={c.id} style={{border:`2px solid ${awarded?"#A3D9B8":isLow?C.green:C.border}`,borderRadius:10,background:awarded?C.greenBg:C.surface,overflow:"hidden",transition:"border-color 0.15s"}}>
-              {/* Contractor header */}
+            <div key={c.id} style={{border:`2px solid ${awarded?"#A3D9B8":isLow?C.green:C.border}`,borderRadius:10,background:awarded?C.greenBg:C.surface,overflow:"hidden",transition:"border-color 0.15s",display:"flex",flexDirection:"column"}}>
+              {/* Header */}
               <div style={{padding:"12px 14px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div style={{flex:1,minWidth:0}}>
                   <input value={c.name} onChange={e=>updateContractor(c.id,"name",e.target.value)}
                     style={{fontWeight:700,fontSize:14,color:C.text,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit",padding:0}}/>
                   <div style={{display:"flex",flexDirection:"column",gap:2,marginTop:4}}>
-                    <input value={c.phone||""} onChange={e=>updateContractor(c.id,"phone",e.target.value)} placeholder="Phone"
+                    <input value={c.phone||""} onChange={e=>updateContractor(c.id,"phone",fmtPhone(e.target.value))} placeholder="Phone"
                       style={{fontSize:11,color:C.muted,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit",padding:0}}/>
                     <input value={c.email||""} onChange={e=>updateContractor(c.id,"email",e.target.value)} placeholder="Email"
                       style={{fontSize:11,color:C.muted,border:"none",background:"transparent",outline:"none",width:"100%",fontFamily:"inherit",padding:0}}/>
@@ -411,22 +427,32 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
                 <button onClick={()=>removeContractor(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:12,flexShrink:0,padding:"0 2px"}}>✕</button>
               </div>
 
-              {/* Line items */}
-              {quote.items.map((item,ri)=>{
-                const val=item.amounts[c.id]||0;
-                return (
-                  <div key={item.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",borderBottom:ri<quote.items.length-1?`1px solid ${C.divider}`:"none"}}>
-                    <span style={{fontSize:12,color:C.muted,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span>
+              {/* Line items (per-contractor) */}
+              <div style={{flex:1}}>
+                {items.map((item,ri)=>(
+                  <div key={item.id} style={{display:"flex",alignItems:"center",gap:4,padding:"7px 14px",borderBottom:`1px solid ${C.divider}`}}
+                    onMouseEnter={e=>{const b=e.currentTarget.querySelector(".rmit");if(b)b.style.opacity="1";}}
+                    onMouseLeave={e=>{const b=e.currentTarget.querySelector(".rmit");if(b)b.style.opacity="0";}}>
+                    <button className="rmit" onClick={()=>removeItemFrom(c.id,item.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:10,flexShrink:0,opacity:0,transition:"opacity 0.1s",padding:"0 2px"}}>✕</button>
+                    <input value={item.label} onChange={e=>updateItem(c.id,item.id,"label",e.target.value)}
+                      style={{flex:1,fontSize:12,color:C.muted,border:"none",background:"transparent",outline:"none",fontFamily:"inherit",padding:0,minWidth:0}}/>
                     <div style={{display:"flex",alignItems:"center",gap:2,flexShrink:0}}>
                       <span style={{fontSize:11,color:C.faint}}>$</span>
-                      <input type="text" defaultValue={val?fmtN(val):""} placeholder="0.00"
-                        onFocus={e=>{e.target.value=val||"";e.target.select();}}
-                        onBlur={e=>{const v=parseMoney(e.target.value);e.target.value=v?fmtN(v):"";setAmount(item.id,c.id,v);}}
+                      <input type="text" defaultValue={item.amount?fmtN(item.amount):""} placeholder="0.00"
+                        onFocus={e=>{e.target.value=item.amount||"";e.target.select();}}
+                        onBlur={e=>{const v=parseMoney(e.target.value);e.target.value=v?fmtN(v):"";updateItem(c.id,item.id,"amount",v);}}
                         style={{width:72,textAlign:"right",fontSize:13,fontVariantNumeric:"tabular-nums",color:C.text,border:"none",background:"transparent",outline:"none",fontFamily:"inherit",padding:0}}/>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+                <button onClick={()=>addItemTo(c.id)} style={{width:"100%",padding:"6px 14px",fontSize:11,color:C.accent,background:"none",border:"none",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>+ Add line item</button>
+              </div>
+
+              {/* Notes */}
+              <div style={{padding:"6px 14px",borderTop:`1px solid ${C.divider}`}}>
+                <textarea value={c.notes||""} onChange={e=>updateContractor(c.id,"notes",e.target.value)} placeholder="Notes…" rows={2}
+                  style={{width:"100%",fontSize:11,color:C.muted,border:"none",background:"transparent",outline:"none",fontFamily:"inherit",padding:0,resize:"vertical",lineHeight:1.4}}/>
+              </div>
 
               {/* Total + award */}
               <div style={{padding:"10px 14px",background:isLow?"rgba(46,160,67,0.06)":C.bg,borderTop:`2px solid ${C.border}`}}>
@@ -446,24 +472,6 @@ function QuoteComparison({quote,onUpdate,phaseName,onAward}) {
             </div>
           );
         })}
-      </div>
-
-      {/* Line items editor */}
-      <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",marginBottom:16}}>
-        <div style={{padding:"8px 14px",background:C.bg,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.04em"}}>Line Items</span>
-          <button onClick={addItem} style={{fontSize:11,color:C.accent,background:"none",border:"none",cursor:"pointer",fontWeight:500}}>+ Add</button>
-        </div>
-        {quote.items.map((item,i)=>(
-          <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderBottom:i<quote.items.length-1?`1px solid ${C.divider}`:"none"}}
-            onMouseEnter={e=>e.currentTarget.querySelector(".rm").style.opacity=1}
-            onMouseLeave={e=>e.currentTarget.querySelector(".rm").style.opacity=0}>
-            <input value={item.label} onChange={e=>updateItemLabel(item.id,e.target.value)}
-              style={{flex:1,fontSize:13,color:C.text,border:"none",background:"transparent",outline:"none",fontFamily:"inherit",padding:0}}/>
-            <button className="rm" onClick={()=>removeItem(item.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:11,flexShrink:0,opacity:0,transition:"opacity 0.1s"}}>✕</button>
-          </div>
-        ))}
-        {quote.items.length===0&&<p style={{padding:"12px 14px",fontSize:12,color:C.faint}}>No line items yet.</p>}
       </div>
 
       {/* Notes */}
@@ -567,7 +575,7 @@ function SubtaskPanel({taskId, projectId, tasks, onUpdateTask, onAddTask, onDele
   );
 }
 
-function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddTask,onDeleteTask,onUpdateQuote,onAddEvent,team}) {
+function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddTask,onDeleteTask,onUpdateQuote,onAddEvent,team,onAwardContractor}) {
   const [addedToCalendar, setAddedToCalendar] = useState(false);
   const [taskTab, setTaskTab] = useState("detail"); // "detail" | "quotes"
   const [matSearch, setMatSearch] = useState({open:false,query:"",loading:false,results:null,error:null});
@@ -612,7 +620,7 @@ function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddT
   );
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:900}}>
+    <div className="page-pad" style={{maxWidth:900}}>
       <Breadcrumb crumbs={[{label:"Overview",onClick:()=>onNavigate("dashboard")},{label:phase.name,onClick:onBack},{label:task.title}]}/>
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -635,7 +643,7 @@ function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddT
             <span onClick={onBack} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:C.muted,cursor:"pointer"}}>
               <div style={{width:6,height:6,borderRadius:2,background:pc(phase.id)}}/>{phase.name}
             </span>
-            {task.assignee&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:C.muted}}><Avatar name={task.assignee} size={16}/>{task.assignee}</span>}
+            {task.assignee&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:C.muted}}><Avatar name={task.assignee} size={16} team={team}/>{task.assignee}</span>}
             {duration!==null&&<span style={{fontSize:12,color:C.faint}}>{duration} days</span>}
           </div>
         </div>
@@ -666,7 +674,7 @@ function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddT
       </div>
 
       {taskTab==="detail"&&<>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:20}}>
+      <div className="task-detail-grid" style={{gap:20}}>
         {/* ── Main column ───────────────────────────────────────────── */}
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           {/* Budget card */}
@@ -865,7 +873,7 @@ function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddT
             </PropRow>
             <PropRow label="Assignee">
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                {task.assignee&&<Avatar name={task.assignee} size={20}/>}
+                {task.assignee&&<Avatar name={task.assignee} size={20} team={team}/>}
                 <select value={task.assignee||""} onChange={e=>{const v=e.target.value;onUpdateTask(task.id,t=>({...t,assignee:v}));sbPatch("tasks",task.id,{assignee:v}).catch(console.error);}}
                   style={{fontSize:13,color:C.text,border:"none",background:"transparent",fontFamily:"inherit",outline:"none",cursor:"pointer",padding:0,flex:1}}>
                   <option value="">Unassigned</option>
@@ -932,6 +940,7 @@ function TaskPage({task,phase,tasks,quotes,onBack,onNavigate,onUpdateTask,onAddT
                   sbPatch("tasks",task.id,{price:total}).catch(console.error);
                 }
               }}
+              onAwardContractor={onAwardContractor}
             />
           ) : (
             <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>
@@ -1232,7 +1241,7 @@ function AIPanel({phase, projects, tasks, onAddTasks, onAddBudgetItems, compact}
 }
 
 // ── PHASE DETAIL ───────────────────────────────────────────────────────────
-function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavigate,onUpdateProject,onUpdateTask,onDeleteTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team}) {
+function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavigate,onUpdateProject,onUpdateTask,onDeleteTask,onUpdateQuote,onAddTasks,onAddBudgetItems,onDeleteProject,onAddEvent,team,onAwardContractor}) {
   const phase = project; // alias for minimal churn
   const [tab,setTab]=useState("tasks");
   const [activeTaskId,setActiveTaskId]=useState(initialTaskId||null);
@@ -1258,7 +1267,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
 
   if(activeTaskId){
     const t=tasks.find(x=>x.id===activeTaskId);
-    if(t) return <TaskPage task={t} phase={phase} tasks={tasks} quotes={quotes} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} onAddTask={t=>onAddTasks([t])} onUpdateQuote={onUpdateQuote} onAddEvent={onAddEvent} team={team}/>;
+    if(t) return <TaskPage task={t} phase={phase} tasks={tasks} quotes={quotes} onNavigate={onNavigate} onBack={()=>setActiveTaskId(null)} onUpdateTask={onUpdateTask} onDeleteTask={onDeleteTask} onAddTask={t=>onAddTasks([t])} onUpdateQuote={onUpdateQuote} onAddEvent={onAddEvent} team={team} onAwardContractor={onAwardContractor}/>;
   }
 
   const saveEdit = () => {
@@ -1293,14 +1302,14 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
   const tabs=[{id:"tasks",label:"Tasks"},{id:"quotes",label:"Quotes"},{id:"photos",label:"Photos"},{id:"notes",label:"Notes"},{id:"ai",label:"✦ AI"}];
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:1000}}>
+    <div className="page-pad" style={{maxWidth:1000}}>
       <Breadcrumb crumbs={[{label:"Overview",onClick:()=>onNavigate("dashboard")},{label:phase.name}]}/>
 
       {/* Edit form */}
       {editing&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:20}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>Edit project</p>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div className="form-2col" style={{marginBottom:10}}>
             <div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
               <Input value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))}/>
@@ -1413,7 +1422,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
       </div>
 
       {tab==="tasks"&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:20}}>
+        <div className="task-detail-grid" style={{gap:20}}>
           <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
             <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <p style={{fontSize:13,fontWeight:600,color:C.text}}>Tasks</p>
@@ -1444,7 +1453,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
                       {hasSubs&&<span style={{marginLeft:6,color:C.faint}}>{subs.filter(x=>x.status==="complete").length}/{subs.length} subtasks</span>}
                     </p>
                   </div>
-                  <Avatar name={t.assignee}/>
+                  <Avatar name={t.assignee} team={team}/>
                   <Chip status={t.status}/>
                   {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks,quotes))}</span>}{((t.photos||[]).length>0||t.notes)&&<span style={{fontSize:11,color:C.faint}}>{(t.photos||[]).length>0?"📷":""}{t.notes?"📝":""}</span>}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke={C.faint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -1458,7 +1467,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
                       <p style={{fontSize:12,color:st.status==="complete"?C.muted:C.text,textDecoration:st.status==="complete"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.title}</p>
                       {st.start&&<p style={{fontSize:10,color:C.faint,marginTop:1}}>{fmtD(st.start)} → {fmtD(st.end)}</p>}
                     </div>
-                    {st.assignee&&<Avatar name={st.assignee} size={18}/>}
+                    {st.assignee&&<Avatar name={st.assignee} size={18} team={team}/>}
                     {(st.price||0)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(st.price)}</span>}
                     <Chip status={st.status}/>
                   </div>
@@ -1492,7 +1501,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
                   const done=projectTasks.filter(t=>t.assignee===a&&t.status==="complete").length;
                   return (
                     <div key={a} style={{display:"flex",alignItems:"center",gap:10}}>
-                      <Avatar name={a} size={28}/>
+                      <Avatar name={a} size={28} team={team}/>
                       <div style={{flex:1}}>
                         <p style={{fontSize:13,color:C.text,fontWeight:500}}>{a}</p>
                         <p style={{fontSize:11,color:C.muted}}>{done}/{total} done</p>
@@ -1555,6 +1564,7 @@ function ProjectPage({project,tasks,expenses,quotes,phases,initialTaskId,onNavig
                       sbPatch("tasks",t.id,{price:total}).catch(console.error);
                     }
                   }}
+                  onAwardContractor={onAwardContractor}
                 />}
               </div>
             );
@@ -1785,7 +1795,7 @@ function EventsView({events,setEvents,projects}) {
   const upcoming=events.filter(e=>!e.done&&toMs(e.date)>=toMs(TODAY)).sort((a,b)=>toMs(a.date)-toMs(b.date)).slice(0,3);
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:800}}>
+    <div className="page-pad" style={{maxWidth:800}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Events</h2>
         <div style={{display:"flex",gap:8}}>
@@ -1845,7 +1855,7 @@ function EventsView({events,setEvents,projects}) {
                 <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Title</p>
                 <Input value={form.title} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Event title"/>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div className="form-2col">
                 <div>
                   <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Time (optional)</p>
                   <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))}
@@ -1928,7 +1938,7 @@ function EventsView({events,setEvents,projects}) {
                         <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Title</p>
                         <input value={editForm.title} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))} style={{...fSt,width:"100%"}} onKeyDown={e=>e.key==="Enter"&&saveEdit()}/>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      <div className="form-2col" style={{gap:8}}>
                         <div>
                           <p style={{fontSize:10,color:C.muted,marginBottom:3,fontWeight:500}}>Time</p>
                           <input type="time" value={editForm.time} onChange={e=>setEditForm(f=>({...f,time:e.target.value}))} style={{...fSt,width:"100%"}}/>
@@ -1996,9 +2006,16 @@ function EventsView({events,setEvents,projects}) {
 }
 
 // ── DASHBOARD ──────────────────────────────────────────────────────────────
-function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate,quotes}) {
+function Dashboard({projects,tasks,setTasks,expenses,events,phases,proceeds,onNavigate,quotes,team,session}) {
   const [taskNum,setTaskNum]=useState(2);
-  const [taskUnit,setTaskUnit]=useState("w"); // "w","m","y","all"
+  const [taskUnit,setTaskUnit]=useState("w"); // "d","w","m","y","all"
+  const [myOnly,setMyOnly]=useState(false);
+  const myName=useMemo(()=>{
+    const email=session?.user?.email;
+    if(!email)return null;
+    const m=(team||[]).find(t=>t.email?.toLowerCase()===email.toLowerCase());
+    return m?.name||null;
+  },[session,team]);
   const totalProceeds  = (proceeds||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const totalActual    = tasks.filter(t=>!t.parent_task_id).reduce((s,t)=>s+(taskTotalAct(t,tasks)||0),0);
   const totalProjected = projects.reduce((s,p)=>{
@@ -2006,30 +2023,33 @@ function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate,qu
     return s+tc+(p.contingency||0);
   },0);
   const runningBalance = totalProceeds - totalActual;
+  const projectedCashFlow = totalProceeds - totalProjected;
   const done=tasks.filter(t=>t.status==="complete").length;
   const windowEnd=useMemo(()=>{
     if(taskUnit==="all") return null;
     const d=new Date(TODAY+"T12:00:00");
-    if(taskUnit==="w") d.setDate(d.getDate()+taskNum*7);
+    if(taskUnit==="d") d.setDate(d.getDate()+taskNum);
+    else if(taskUnit==="w") d.setDate(d.getDate()+taskNum*7);
     else if(taskUnit==="m") d.setMonth(d.getMonth()+taskNum);
     else if(taskUnit==="y") d.setFullYear(d.getFullYear()+taskNum);
     return d.toISOString().split("T")[0];
   },[taskNum,taskUnit]);
-  const upcoming=[...tasks].filter(t=>t.status!=="complete"&&t.end&&toMs(t.end)>=toMs(TODAY)&&(!windowEnd||toMs(t.end)<=toMs(windowEnd))).sort((a,b)=>toMs(a.end)-toMs(b.end));
+  const upcoming=[...tasks].filter(t=>t.status!=="complete"&&!t.parent_task_id&&t.end&&toMs(t.end)>=toMs(TODAY)&&(!windowEnd||toMs(t.end)<=toMs(windowEnd))&&(!myOnly||!myName||t.assignee===myName)).sort((a,b)=>toMs(a.end)-toMs(b.end));
   const upcomingEvents=[...events].filter(e=>!e.done&&toMs(e.date)>=toMs(TODAY)).sort((a,b)=>toMs(a.date)-toMs(b.date)).slice(0,4);
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:960}}>
+    <div className="page-pad" style={{maxWidth:960}}>
       <div style={{marginBottom:22}}>
         <p style={{fontSize:13,color:C.muted,marginBottom:3}}>{PROJECT.address}</p>
         <h1 style={{fontSize:22,fontWeight:700,color:C.text,letterSpacing:"-0.3px"}}>{PROJECT.name}</h1>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",marginBottom:22,background:C.border}}>
+      <div className="stat-grid-5" style={{gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",marginBottom:22,background:C.border}}>
         {[
-          {l:"Proceeds",       v:fmtM(totalProceeds),  color:C.text},
-          {l:"Projected Spend",v:fmtM(totalProjected), color:C.text},
-          {l:"Actual Spend",   v:fmtM(totalActual),    color:totalActual>0?"#C0392B":C.muted},
-          {l:"Running Balance",v:fmtM(runningBalance),  color:runningBalance>=0?C.green:"#C0392B"},
+          {l:"Proceeds",         v:fmtM(totalProceeds),     color:C.text},
+          {l:"Projected Spend",  v:fmtM(totalProjected),    color:C.text},
+          {l:"Actual Spend",     v:fmtM(totalActual),       color:totalActual>0?"#C0392B":C.muted},
+          {l:"Actual Cash Flow", v:fmtM(runningBalance),    color:runningBalance>=0?C.green:"#C0392B"},
+          {l:"Projected Cash Flow",v:fmtM(projectedCashFlow),color:projectedCashFlow>=0?C.green:"#C0392B"},
         ].map(({l,v,color})=>(
           <div key={l} style={{background:C.surface,padding:"14px 18px"}}>
             <p style={{fontSize:11,color:C.muted,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>{l}</p>
@@ -2037,77 +2057,125 @@ function Dashboard({projects,tasks,expenses,events,phases,proceeds,onNavigate,qu
           </div>
         ))}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr 0.8fr",gap:16,alignItems:"start"}}>
+      <div className="dash-cols">
+        {/* Left column: Tasks + Events */}
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
           <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <p style={{fontSize:13,fontWeight:600,color:C.text}}>Upcoming tasks</p>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              {taskUnit!=="all"&&<input type="number" min={1} max={52} value={taskNum} onChange={e=>setTaskNum(Math.max(1,parseInt(e.target.value)||1))}
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              {myName&&<button onClick={()=>setMyOnly(v=>!v)} style={{padding:"3px 8px",fontSize:11,fontWeight:myOnly?600:400,borderRadius:5,cursor:"pointer",
+                border:`1px solid ${myOnly?C.accent:C.border}`,background:myOnly?C.accentBg:C.surface,color:myOnly?C.accent:C.muted,transition:"all 0.1s"}}>My tasks</button>}
+              {taskUnit!=="all"&&<input type="number" min={1} max={365} value={taskNum} onChange={e=>setTaskNum(Math.max(1,parseInt(e.target.value)||1))}
                 style={{width:36,border:`1px solid ${C.border}`,borderRadius:5,padding:"3px 6px",fontSize:11,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",textAlign:"center"}}/>}
-              {[{v:"w",l:"Wk"},{v:"m",l:"Mo"},{v:"y",l:"Yr"},{v:"all",l:"All"}].map(o=>(
-                <button key={o.v} onClick={()=>setTaskUnit(o.v)} style={{padding:"3px 8px",fontSize:11,fontWeight:500,borderRadius:5,cursor:"pointer",
-                  border:`1px solid ${taskUnit===o.v?C.accent:C.border}`,background:taskUnit===o.v?C.accentBg:C.surface,color:taskUnit===o.v?C.accent:C.muted,transition:"all 0.1s"}}>{o.l}</button>
-              ))}
+              <select value={taskUnit} onChange={e=>setTaskUnit(e.target.value)}
+                style={{border:`1px solid ${C.border}`,borderRadius:5,padding:"3px 8px 3px 6px",fontSize:11,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none",cursor:"pointer",appearance:"none",WebkitAppearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 6px center",paddingRight:20}}>
+                <option value="d">Day(s)</option>
+                <option value="w">Week(s)</option>
+                <option value="m">Month(s)</option>
+                <option value="y">Year(s)</option>
+                <option value="all">All</option>
+              </select>
             </div>
           </div>
           {upcoming.length===0&&<p style={{padding:"16px",fontSize:12,color:C.muted}}>No tasks due in this window.</p>}
           {upcoming.map((t,i)=>{
             const ph=projects.find(p=>p.id===t.project_id);
+            const isDone=t.status==="complete";
             return (
-              <div key={t.id} onClick={()=>onNavigate("project",t.project_id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:i<upcoming.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-              >
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:i<upcoming.length-1?`1px solid ${C.divider}`:"none"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div onClick={e=>{e.stopPropagation();const ns=isDone?"todo":"complete";setTasks(prev=>prev.map(x=>x.id===t.id?{...x,status:ns}:x));sbPatch("tasks",t.id,{status:ns}).catch(console.error);}}
+                  style={{width:18,height:18,borderRadius:5,border:`2px solid ${isDone?C.green:C.faint}`,background:isDone?C.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+                  {isDone&&<svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
                 <div style={{width:6,height:6,borderRadius:"50%",background:pc(t.project_id),flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <p style={{fontSize:13,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
+                <div onClick={()=>onNavigate("project",t.project_id)} style={{flex:1,minWidth:0,cursor:"pointer"}}>
+                  <p style={{fontSize:13,color:isDone?C.muted:C.text,textDecoration:isDone?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
                   <p style={{fontSize:11,color:C.muted,marginTop:1}}>{ph?.name}</p>
                 </div>
-                <Avatar name={t.assignee}/>
+                <Avatar name={t.assignee} team={team}/>
                 <p style={{fontSize:12,color:C.muted,fontVariantNumeric:"tabular-nums",minWidth:48,textAlign:"right"}}>{fmtD(t.end)}</p>
               </div>
             );
           })}
         </div>
-        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
-          <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Projects</p></div>
-          {projects.map((ph,i)=>{
-            const pTasks=tasks.filter(t=>t.project_id===ph.id);
-            const projected=pTasks.filter(t=>!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks,quotes)||0),0)+(ph.contingency||0);
-            const actual=pTasks.filter(t=>!t.parent_task_id).reduce((a,t)=>a+(taskTotalAct(t,tasks)||0),0);
-            const cap=projected||ph.target_budget||1;
-            return (
-              <div key={ph.id} onClick={()=>onNavigate("project",ph.id)} style={{padding:"9px 16px",borderBottom:i<projects.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-              >
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <div style={{width:7,height:7,borderRadius:2,background:pc(ph.id)}}/>
-                  <span style={{fontSize:13,color:C.text,flex:1,fontWeight:500}}>{ph.name}</span>
+          {/* Upcoming events */}
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
+            <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <p style={{fontSize:13,fontWeight:600,color:C.text}}>Upcoming events</p>
+              <span onClick={()=>onNavigate("events")} style={{fontSize:11,color:C.accent,cursor:"pointer"}}>See all</span>
+            </div>
+            {upcomingEvents.length===0&&<p style={{padding:"16px",fontSize:12,color:C.muted}}>No upcoming events.</p>}
+            {upcomingEvents.map((ev,i)=>{
+              const col=eventColor(ev.type);
+              return (
+                <div key={ev.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 16px",borderBottom:i<upcomingEvents.length-1?`1px solid ${C.divider}`:"none"}}>
+                  <div style={{width:3,alignSelf:"stretch",background:col,borderRadius:2,flexShrink:0,minHeight:24}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:12,fontWeight:500,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.title}</p>
+                    <p style={{fontSize:11,color:C.muted,marginTop:1}}>{fmtFull(ev.date)}</p>
+                  </div>
+                  <span style={{fontSize:10,color:col,fontWeight:500,flexShrink:0,marginTop:1}}>{eventLabel(ev.type)}</span>
                 </div>
-                <div style={{height:3,background:C.divider,borderRadius:2,marginLeft:15}}>
-                  <div style={{height:"100%",width:`${Math.min(100,(actual/cap)*100)}%`,background:C.green,borderRadius:2}}/>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
-          <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <p style={{fontSize:13,fontWeight:600,color:C.text}}>Events</p>
-            <span onClick={()=>onNavigate("events")} style={{fontSize:11,color:C.accent,cursor:"pointer"}}>See all</span>
+              );
+            })}
           </div>
-          {upcomingEvents.length===0&&<p style={{padding:"16px",fontSize:12,color:C.muted}}>No upcoming events.</p>}
-          {upcomingEvents.map((ev,i)=>{
-            const col=eventColor(ev.type);
-            return (
-              <div key={ev.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 16px",borderBottom:i<upcomingEvents.length-1?`1px solid ${C.divider}`:"none"}}>
-                <div style={{width:3,alignSelf:"stretch",background:col,borderRadius:2,flexShrink:0,minHeight:24}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <p style={{fontSize:12,fontWeight:500,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.title}</p>
-                  <p style={{fontSize:11,color:C.muted,marginTop:1}}>{fmtFull(ev.date)}</p>
+        </div>{/* end left column */}
+        {/* Right column: Projects + Team */}
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
+            <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`}}><p style={{fontSize:13,fontWeight:600,color:C.text}}>Projects</p></div>
+            {projects.map((ph,i)=>{
+              const pTasks=tasks.filter(t=>t.project_id===ph.id);
+              const projected=pTasks.filter(t=>!t.parent_task_id).reduce((a,t)=>a+(taskTotalEst(t,tasks,quotes)||0),0)+(ph.contingency||0);
+              const actual=pTasks.filter(t=>!t.parent_task_id).reduce((a,t)=>a+(taskTotalAct(t,tasks)||0),0);
+              const cap=projected||ph.target_budget||1;
+              const doneCount=pTasks.filter(t=>t.status==="complete").length;
+              return (
+                <div key={ph.id} onClick={()=>onNavigate("project",ph.id)} style={{padding:"10px 16px",borderBottom:i<projects.length-1?`1px solid ${C.divider}`:"none",cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                    <div style={{width:7,height:7,borderRadius:2,background:pc(ph.id)}}/>
+                    <span style={{fontSize:13,color:C.text,flex:1,fontWeight:500}}>{ph.name}</span>
+                    <span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{doneCount}/{pTasks.length}</span>
+                  </div>
+                  <div style={{height:3,background:C.divider,borderRadius:2,marginLeft:15}}>
+                    <div style={{height:"100%",width:`${Math.min(100,(actual/cap)*100)}%`,background:C.green,borderRadius:2}}/>
+                  </div>
+                  {(projected>0||actual>0)&&<div style={{display:"flex",gap:10,marginTop:4,marginLeft:15}}>
+                    {projected>0&&<span style={{fontSize:10,color:C.faint}}>Est {fmtM(projected)}</span>}
+                    {actual>0&&<span style={{fontSize:10,color:actual>projected?"#c33":C.green,fontWeight:500}}>Act {fmtM(actual)}</span>}
+                  </div>}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          {/* Team */}
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8}}>
+            <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.divider}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <p style={{fontSize:13,fontWeight:600,color:C.text}}>Team</p>
+              <span onClick={()=>onNavigate("team")} style={{fontSize:11,color:C.accent,cursor:"pointer"}}>Manage</span>
+            </div>
+            {(team||[]).length===0&&<p style={{padding:"16px",fontSize:12,color:C.muted}}>No team members yet.</p>}
+            {(team||[]).map((m,i)=>{
+              const memberTasks=tasks.filter(t=>t.assignee===m.name&&t.status!=="complete"&&!t.parent_task_id);
+              return (
+                <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<team.length-1?`1px solid ${C.divider}`:"none"}}>
+                  <Avatar name={m.name} size={28} role={m.role}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:13,color:C.text,fontWeight:500}}>{m.name}</p>
+                    {m.role&&<p style={{fontSize:11,color:C.muted,marginTop:1}}>{m.role}</p>}
+                    <div style={{display:"flex",gap:10,marginTop:2}}>
+                      {m.phone&&<a href={`tel:${m.phone.replace(/\D/g,"")}`} style={{fontSize:11,color:C.accent,textDecoration:"none"}}>{m.phone}</a>}
+                      {m.email&&<a href={`mailto:${m.email}`} style={{fontSize:11,color:C.accent,textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email}</a>}
+                    </div>
+                  </div>
+                  <span style={{fontSize:11,color:memberTasks.length>0?C.text:C.faint,fontVariantNumeric:"tabular-nums"}}>{memberTasks.length} task{memberTasks.length!==1?"s":""}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -2190,7 +2258,7 @@ function CfCanvas({h,cfActual,cfProj,cfLines,yMin,yRange,pS,pE,months,todayPct,v
 
 // ── TIMELINE ───────────────────────────────────────────────────────────────
 const LCOL=320;
-function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,setProceeds,phases,expenses,quotes,updateQuote,team,events,setEvents,onDeleteTask}) {
+function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,setProceeds,phases,expenses,quotes,updateQuote,team,events,setEvents,onDeleteTask,onAwardContractor}) {
   const [tlRange,setTlRange]=useState({start:addDays(TODAY,-14),end:addDays(TODAY,76)});
   const pS=tlRange.start,pE=tlRange.end,projDays=daysBetween(pS,pE)||1;
   const setRange=(s,e)=>setTlRange({start:s,end:e});
@@ -2535,7 +2603,8 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
 
       <div ref={containerRef} onWheel={onWheel} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",maxHeight:"calc(100vh - 120px)",overflowY:"auto",position:"relative"}}>
         {/* ── Sticky top section ──────────────────────────────── */}
-        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(255,255,255,0.82)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",borderBottom:`2px solid ${C.border}`}}>
+        <div style={{position:"sticky",top:0,zIndex:10,borderBottom:`2px solid ${C.border}`}}>
+        <div style={{background:C.surface}}>
         {/* Month header */}
         <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:"transparent"}}>
           <div style={{width:LCOL,flexShrink:0,padding:"10px 20px",borderRight:`1px solid ${C.border}`}}>
@@ -2792,8 +2861,9 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           </>}
         </div>
 
+        </div>{/* end solid background */}
         {/* ── Inline Cash Flow chart ─────────────────────────── */}
-        <div style={{borderBottom:`2px solid ${C.border}`}}>
+        <div style={{background:"rgba(255,255,255,0.75)"}}>
           <div style={{display:"flex",alignItems:"center",height:36,background:"transparent"}}>
             <div onClick={()=>setShowCashFlow(s=>!s)} style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showCashFlow?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s"}}>
@@ -2867,7 +2937,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                   </svg>
                   {grp.color
                     ? <div style={{width:8,height:8,borderRadius:2,background:grp.color,flexShrink:0}}/>
-                    : <Avatar name={grp.label} size={20}/>
+                    : <Avatar name={grp.label} size={20} team={team}/>
                   }
                   <span onClick={e=>{e.stopPropagation();if(grp.onHeaderClick)grp.onHeaderClick();}} style={{fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:grp.onHeaderClick?"pointer":"default"}}>{grp.label}</span>
                   <span style={{fontSize:11,color:C.faint,marginLeft:"auto",flexShrink:0}}>{grp.rows.length}</span>
@@ -2909,7 +2979,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                         {groupBy!=="phase"&&<div style={{width:7,height:7,borderRadius:"50%",background:pc(t.project_id),flexShrink:0}}/>}
                         <span className="tl-name" onClick={()=>setPeek({type:"task",id:t.id})} style={{fontSize:12,color:done?C.muted:undated?C.faint:C.text,textDecoration:done?"line-through":"none",lineHeight:"1.35"}}>{t.title}</span>
                         {hasSubs&&<span style={{fontSize:10,color:C.faint,flexShrink:0}}>{subs.filter(s=>s.status==="complete").length}/{subs.length}</span>}
-                        {groupBy==="phase"&&<Avatar name={t.assignee} size={16}/>}
+                        {groupBy==="phase"&&<Avatar name={t.assignee} size={16} team={team}/>}
                       </div>
                       {(taskTotalEst(t,tasks,quotes)>0||taskTotalAct(t,tasks)>0)&&<div style={{display:"flex",gap:8,marginTop:2}}>
                         {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:10,color:C.faint,fontVariantNumeric:"tabular-nums"}}>Est {fmtM(taskTotalEst(t,tasks,quotes))}</span>}
@@ -3065,7 +3135,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
       </div>
 
       {/* ── Side peek panels ─────────────────────────────────── */}
-      {peek?.type==="task"&&<PeekPanel taskId={peek.id} tasks={tasks} setTasks={setTasks} projects={projects} team={team} quotes={quotes} onClose={()=>setPeek(null)} onNavigate={onNavigate} onDeleteTask={onDeleteTask} onUpdateQuote={updateQuote}/>}
+      {peek?.type==="task"&&<PeekPanel taskId={peek.id} tasks={tasks} setTasks={setTasks} projects={projects} team={team} quotes={quotes} onClose={()=>setPeek(null)} onNavigate={onNavigate} onDeleteTask={onDeleteTask} onUpdateQuote={updateQuote} onAwardContractor={onAwardContractor}/>}
       {peek?.type==="proceed"&&<ProceedPeek id={peek.id} proceeds={proceeds} setProceeds={setProceeds} onClose={()=>setPeek(null)}/>}
       {peek?.type==="event"&&<EventPeek id={peek.id} events={events} setEvents={setEvents} onClose={()=>setPeek(null)}/>}
       {peek?.type==="project"&&<ProjectPeek id={peek.id} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onClose={()=>setPeek(null)} onNavigate={onNavigate} quotes={quotes}/>}
@@ -3094,7 +3164,7 @@ function AddSubtaskInline({parentId,projectId,setTasks}){
   </div>;
 }
 
-function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigate,onDeleteTask,onUpdateQuote}){
+function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigate,onDeleteTask,onUpdateQuote,onAwardContractor}){
   const t=tasks.find(x=>x.id===taskId);
   const ph=t?projects.find(p=>p.id===t.project_id):null;
   const taskQuote=(quotes||[]).find(q=>q.task_id===taskId);
@@ -3123,7 +3193,7 @@ function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigat
   return (
     <Fragment>
       <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.2)",zIndex:50}}/>
-      <div style={{position:"fixed",top:0,right:0,bottom:0,width:480,background:C.bg,zIndex:51,boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="peek-panel" style={{background:C.bg,boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {/* Header */}
         <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -3276,6 +3346,7 @@ function PeekPanel({taskId,tasks,setTasks,projects,team,quotes,onClose,onNavigat
                       sbPatch("tasks",taskId,{price:total}).catch(console.error);
                     }
                   }}
+                  onAwardContractor={onAwardContractor}
                 />
               ) : (
                 <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>
@@ -3315,7 +3386,7 @@ function PeekShell({onClose,title,icon,color,children,footer}){
   return (
     <Fragment>
       <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.2)",zIndex:50}}/>
-      <div style={{position:"fixed",top:0,right:0,bottom:0,width:480,background:C.bg,zIndex:51,boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="peek-panel" style={{background:C.bg,boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -3513,13 +3584,13 @@ function ProjectPeek({id,projects,setProjects,tasks,expenses,onClose,onNavigate,
 }
 
 // ── WEEKLY ─────────────────────────────────────────────────────────────────
-function WeeklyView({tasks,setTasks,projects,onNavigate}) {
+function WeeklyView({tasks,setTasks,projects,onNavigate,team}) {
   const[dragId,setDragId]=useState(null);const[overWeek,setOverWeek]=useState(null);
   const grouped=useMemo(()=>{const sorted=[...tasks].sort((a,b)=>toMs(a.end)-toMs(b.end));const weeks={};sorted.forEach(t=>{const d=new Date(t.end+"T12:00:00");const mon=new Date(d);mon.setDate(d.getDate()-((d.getDay()+6)%7));const key=mon.toISOString().split("T")[0];if(!weeks[key])weeks[key]=[];weeks[key].push(t);});return Object.entries(weeks).sort(([a],[b])=>a.localeCompare(b));},[tasks]);
   const onDragStart=(e,id)=>{setDragId(id);const img=new Image();img.src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";e.dataTransfer.setDragImage(img,0,0);};
   const onDrop=ws=>{if(!dragId)return;const t=tasks.find(x=>x.id===dragId);if(!t||!t.start||!t.end)return;const dur=daysBetween(t.start,t.end);const ne=addDays(ws,5);setTasks(prev=>prev.map(x=>x.id===dragId?{...x,start:addDays(ne,-dur),end:ne}:x));setDragId(null);setOverWeek(null);};
   return (
-    <div style={{padding:"32px 40px",userSelect:dragId?"none":"auto"}}>
+    <div className="page-pad" style={{userSelect:dragId?"none":"auto"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:14,marginBottom:22}}><h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Weekly</h2><span style={{fontSize:12,color:C.muted}}>Drag to reschedule · click to open</span></div>
       {grouped.map(([ws,wt])=>{const d=new Date(ws+"T12:00:00");const we=new Date(d);we.setDate(d.getDate()+6);const isPast=we<new Date(TODAY+"T12:00:00");const isOver=overWeek===ws;
         return (
@@ -3541,7 +3612,7 @@ function WeeklyView({tasks,setTasks,projects,onNavigate}) {
                       <p style={{fontSize:13,color:done?C.muted:C.text,textDecoration:done?"line-through":"none",lineHeight:1.35,marginBottom:5}}>{t.title}</p>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                         <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:C.muted}}><div style={{width:6,height:6,borderRadius:"50%",background:pc(t.project_id)}}/>{ph?.name}</span>
-                        <Avatar name={t.assignee}/>
+                        <Avatar name={t.assignee} team={team}/>
                         {t.photos.length>0&&<span style={{fontSize:11,color:C.muted}}>📷{t.photos.length}</span>}
                       </div>
                     </div>
@@ -3558,7 +3629,7 @@ function WeeklyView({tasks,setTasks,projects,onNavigate}) {
 }
 
 // ── QUOTES VIEW ───────────────────────────────────────────────────────────
-function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, onNavigate}) {
+function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, onNavigate, onAwardContractor}) {
   const [filterProject, setFilterProject] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [expandedId, setExpandedId] = useState(null);
@@ -3590,23 +3661,25 @@ function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, 
     if(!newForm.project_id) return;
     const pid = parseInt(newForm.project_id);
     const tid = newForm.task_id ? parseInt(newForm.task_id) : null;
+    const defItems=[{id:uid(),label:"Labor",amount:0},{id:uid(),label:"Materials",amount:0}];
     const newQ = {
       id:uid(), project_id:pid, task_id:tid, awarded_to:null, notes:"",
       contractors:[
-        {id:uid(),name:"Contractor 1",phone:"",email:"",sort_order:0},
-        {id:uid(),name:"Contractor 2",phone:"",email:"",sort_order:1},
+        {id:uid(),name:"Contractor 1",phone:"",email:"",notes:"",sort_order:0,items:defItems.map(i=>({...i,id:uid()}))},
+        {id:uid(),name:"Contractor 2",phone:"",email:"",notes:"",sort_order:1,items:defItems.map(i=>({...i,id:uid()}))},
       ],
-      items:[
-        {id:uid(),label:"Labor",amounts:{}},
-        {id:uid(),label:"Materials",amounts:{}},
-      ],
+      items:[],
     };
     updateQuote(null, null, newQ);
     setNewForm({project_id:"",task_id:""});
     setShowAdd(false);
   };
 
-  const quoteTotal = (q, cId) => q.items.reduce((s,item)=>s+(item.amounts[cId]||0),0);
+  const quoteTotal = (q, cId) => {
+    const c=q.contractors.find(x=>x.id===cId);
+    if(c?.items) return (c.items||[]).reduce((s,item)=>s+(item.amount||0),0);
+    return (q.items||[]).reduce((s,item)=>s+(item.amounts?.[cId]||0),0);
+  };
   const quoteTotalRange = (q) => {
     if(!q.contractors.length) return {min:0,max:0};
     const totals = q.contractors.map(c=>quoteTotal(q,c.id));
@@ -3627,7 +3700,7 @@ function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, 
   };
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:1000}}>
+    <div className="page-pad" style={{maxWidth:1200}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Quotes</h2>
         <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>{showAdd?"Cancel":"+ New quote"}</Btn>
@@ -3652,7 +3725,7 @@ function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, 
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:20}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New quote comparison</p>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          <div className="form-2col" style={{marginBottom:14}}>
             <div>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Project *</p>
               <select value={newForm.project_id} onChange={e=>setNewForm(f=>({...f,project_id:e.target.value,task_id:""}))}
@@ -3680,8 +3753,9 @@ function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, 
       )}
 
       {/* Quote list grouped by project */}
+      <div className="quote-grid">
       {grouped.map(grp=>(
-        <div key={grp.key} style={{marginBottom:20}}>
+        <div key={grp.key} style={{gridColumn:expandedId&&grp.items.some(q=>q.id===expandedId)?"1/-1":"auto"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
             <div style={{width:8,height:8,borderRadius:2,background:grp.color}}/>
             <span style={{fontSize:12,fontWeight:600,color:C.text,cursor:"pointer"}} onClick={()=>onNavigate("project",grp.key)}>{grp.label}</span>
@@ -3758,6 +3832,7 @@ function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, 
                         phaseName={linkedTask?linkedTask.title:grp.label}
                         onUpdate={fn=>updateQuote(q.id,fn)}
                         onAward={total=>handleAward(q, total)}
+                        onAwardContractor={onAwardContractor}
                       />
                     </div>
                   )}
@@ -3767,6 +3842,7 @@ function QuotesView({quotes, projects, tasks, setQuotes, setTasks, updateQuote, 
           </div>
         </div>
       ))}
+      </div>
 
       {filtered.length===0&&!showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:40,textAlign:"center",color:C.muted,fontSize:13,background:C.surface}}>
@@ -3919,7 +3995,7 @@ function CashFlowChart({proceeds, tasks, projects, quotes, onNavigate}) {
   return (
     <div>
       {/* Cursor readout */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.border,marginBottom:16}}>
+      <div className="stat-grid-5" style={{gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.border,marginBottom:16}}>
         {[
           {l:fmtFull(cursorDate), v:"", sub:"cursor date", color:C.text, isDate:true},
           {l:"Cash In",        v:fmtM(cursorIn),   color:C.green},
@@ -4336,7 +4412,7 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
   const selSt = {border:`1px solid ${C.border}`,borderRadius:5,padding:"7px 10px",fontSize:13,color:C.text,background:C.surface,fontFamily:"inherit",outline:"none"};
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:960}}>
+    <div className="page-pad" style={{maxWidth:960}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Tasks</h2>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -4531,7 +4607,7 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
             const grpEst=grp.items.reduce((s,t)=>s+taskTotalEst(t,tasks,quotes),0);
             const grpAct=grp.items.reduce((s,t)=>s+taskTotalAct(t,tasks),0);
             return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              {grp.color ? <div style={{width:8,height:8,borderRadius:2,background:grp.color}}/> : <Avatar name={grp.label} size={18}/>}
+              {grp.color ? <div style={{width:8,height:8,borderRadius:2,background:grp.color}}/> : <Avatar name={grp.label} size={18} team={team}/>}
               <span style={{fontSize:12,fontWeight:600,color:C.text}}>{grp.label}</span>
               <span style={{fontSize:11,color:C.faint}}>{grp.items.length}</span>
               <span style={{marginLeft:"auto"}}/>
@@ -4581,7 +4657,7 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
                       <span style={{fontSize:11,color:C.faint}}>{t.start?fmtD(t.start)+" → "+(t.end?fmtD(t.end):"…"):"No date"}</span>
                     </div>
                   </div>
-                  {t.assignee&&<Avatar name={t.assignee} size={22}/>}
+                  {t.assignee&&<Avatar name={t.assignee} size={22} team={team}/>}
                   {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(taskTotalEst(t,tasks,quotes))}</span>}
                   <Chip status={t.status}/>
                   {onDeleteTask&&<button data-del onClick={e=>{e.stopPropagation();if(confirm(`Delete "${t.title}"${subs.length?` and ${subs.length} subtask(s)`:""}?`)){subs.forEach(s=>onDeleteTask(s.id));onDeleteTask(t.id);}}} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.faint,padding:"2px 4px",borderRadius:4,opacity:0,transition:"opacity 0.15s"}} title="Delete task">🗑</button>}
@@ -4594,7 +4670,7 @@ function TasksGrid({tasks, setTasks, projects, setProjects, onNavigate, team, se
                     <svg width="10" height="10" viewBox="0 0 10 10" style={{flexShrink:0,opacity:0.2}}><path d="M2 0v6h6" stroke={C.muted} strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
                     <CheckBox done={st.status==="complete"} onClick={e=>{e.stopPropagation();toggleDone(st.id);}}/>
                     <span onClick={()=>onNavigate("project",st.project_id,st.id)} style={{flex:1,fontSize:12,color:st.status==="complete"?C.muted:C.text,textDecoration:st.status==="complete"?"line-through":"none",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.title}</span>
-                    {st.assignee&&<Avatar name={st.assignee} size={18}/>}
+                    {st.assignee&&<Avatar name={st.assignee} size={18} team={team}/>}
                     {(st.price||0)>0&&<span style={{fontSize:11,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{fmtM(st.price)}</span>}
                     <Chip status={st.status}/>
                   </div>
@@ -4629,6 +4705,7 @@ function TeamView({team, setTeam, tasks, projects}) {
   const addRef = useRef(null);
   useEffect(()=>{ if(showAdd && addRef.current) addRef.current.focus(); },[showAdd]);
   useEffect(()=>{ if(toast){ const t=setTimeout(()=>setToast(null),3000); return ()=>clearTimeout(t); } },[toast]);
+  const roles=useMemo(()=>[...new Set((team||[]).map(m=>m.role).filter(Boolean))].sort(),[team]);
 
   const submitAdd = async () => {
     const name = addName.trim();
@@ -4671,7 +4748,7 @@ function TeamView({team, setTeam, tasks, projects}) {
     setInviting(null);
   };
 
-  const startEdit = (m) => { setEditId(m.id); setEditForm({name:m.name||"",role:m.role||"",phone:m.phone||"",email:m.email||""}); };
+  const startEdit = (m) => { setEditId(m.id); setEditForm({name:m.name||"",role:m.role||"",phone:m.phone?fmtPhone(m.phone):"",email:m.email||""}); };
   const cancelEdit = () => { setEditId(null); setEditForm({}); };
   const saveEdit = (id) => {
     const data = {name:editForm.name.trim(),role:editForm.role.trim(),phone:editForm.phone.trim(),email:editForm.email.trim()};
@@ -4701,7 +4778,7 @@ function TeamView({team, setTeam, tasks, projects}) {
   const editInputSt = {border:`1px solid ${C.accent}`,borderRadius:4,padding:"4px 8px",fontSize:12,color:C.text,background:C.bg,fontFamily:"inherit",outline:"none"};
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:900}}>
+    <div className="page-pad" style={{maxWidth:900}}>
       {/* Toast */}
       {toast&&(
         <div style={{position:"fixed",top:16,right:16,zIndex:999,padding:"10px 18px",borderRadius:8,fontSize:13,fontWeight:500,
@@ -4719,6 +4796,17 @@ function TeamView({team, setTeam, tasks, projects}) {
         <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>{showAdd?"Cancel":"+ Add member"}</Btn>
       </div>
 
+      {roles.length>0&&(
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:14}}>
+          {roles.map(r=>(
+            <span key={r} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:C.muted}}>
+              <span style={{width:8,height:8,borderRadius:"50%",background:roleColor(r)}}/>
+              {r}
+            </span>
+          ))}
+        </div>
+      )}
+
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:16,marginBottom:16}}>
           <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
@@ -4728,17 +4816,21 @@ function TeamView({team, setTeam, tasks, projects}) {
                 placeholder="Full name" onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submitAdd();}if(e.key==="Escape")setShowAdd(false);}}
                 style={{...inputSt,width:"100%"}}/>
             </div>
-            <div style={{width:130}}>
+            <div style={{flex:1,minWidth:120}}>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Role</p>
-              <input value={addRole} onChange={e=>setAddRole(e.target.value)} placeholder="e.g. Contractor"
-                style={{...inputSt,width:"100%"}}/>
+              <div style={{position:"relative"}}>
+                <input list="role-options" value={addRole} onChange={e=>setAddRole(e.target.value)} placeholder="e.g. Contractor"
+                  style={{...inputSt,width:"100%"}}/>
+                <datalist id="role-options">{roles.map(r=><option key={r} value={r}/>)}</datalist>
+                {addRole&&<span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",width:8,height:8,borderRadius:"50%",background:roleColor(addRole)}}/>}
+              </div>
             </div>
-            <div style={{width:130}}>
+            <div style={{flex:1,minWidth:120}}>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Phone</p>
-              <input value={addPhone} onChange={e=>setAddPhone(e.target.value)} placeholder="555-0100"
+              <input value={addPhone} onChange={e=>setAddPhone(fmtPhone(e.target.value))} placeholder="(555)555-0100"
                 style={{...inputSt,width:"100%"}}/>
             </div>
-            <div style={{width:200}}>
+            <div style={{flex:1,minWidth:160}}>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Email</p>
               <input value={addEmail} onChange={e=>setAddEmail(e.target.value)} placeholder="email@example.com"
                 style={{...inputSt,width:"100%"}}/>
@@ -4759,11 +4851,16 @@ function TeamView({team, setTeam, tasks, projects}) {
 
       <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.surface}}>
         {/* Header */}
-        <div style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 120px 170px 70px 50px 90px 50px",gap:0,padding:"8px 16px",borderBottom:`1px solid ${C.divider}`,background:C.bg}}>
+        <div className="team-table" style={{gap:0,padding:"8px 16px",borderBottom:`1px solid ${C.divider}`,background:C.bg}}>
           <span/>
-          {["Name","Role","Phone","Email","Tasks","Active","Status",""].map(h=>(
-            <span key={h} style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>{h}</span>
-          ))}
+          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Name</span>
+          <span className="team-hide-tablet" style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Role</span>
+          <span className="team-hide-tablet" style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Phone</span>
+          <span className="team-hide-mobile" style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Email</span>
+          <span className="team-hide-mobile" style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Tasks</span>
+          <span className="team-hide-mobile" style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Active</span>
+          <span style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Status</span>
+          <span/>
         </div>
         {team.length===0&&<div style={{padding:24,textAlign:"center",color:C.muted,fontSize:13}}>No team members yet.</div>}
         {team.map((m,i)=>{
@@ -4771,21 +4868,22 @@ function TeamView({team, setTeam, tasks, projects}) {
           const statusLabel = m.user_id ? "Joined" : m.invited ? "Invited" : m.email ? "Not invited" : "No email";
           const statusColor = m.user_id ? C.green : m.invited ? C.accent : C.faint;
           return (
-            <div key={m.id} style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 120px 170px 70px 50px 90px 50px",gap:0,padding:"10px 16px",borderBottom:i<team.length-1?`1px solid ${C.divider}`:"none",alignItems:"center"}}
+            <div key={m.id} className="team-table" style={{gap:0,padding:"10px 16px",borderBottom:i<team.length-1?`1px solid ${C.divider}`:"none",alignItems:"center"}}
               onMouseEnter={e=>e.currentTarget.style.background=C.hover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <Avatar name={m.name} size={26}/>
+              <Avatar name={m.name} size={26} role={m.role}/>
               {isEditing ? (
                 <Fragment>
                   <input value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")saveEdit(m.id);if(e.key==="Escape")cancelEdit();}}
                     style={editInputSt}/>
-                  <input value={editForm.role} onChange={e=>setEditForm(f=>({...f,role:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")saveEdit(m.id);if(e.key==="Escape")cancelEdit();}}
+                  <input className="team-hide-tablet" list="role-options-edit" value={editForm.role} onChange={e=>setEditForm(f=>({...f,role:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")saveEdit(m.id);if(e.key==="Escape")cancelEdit();}}
                     style={editInputSt}/>
-                  <input value={editForm.phone} onChange={e=>setEditForm(f=>({...f,phone:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")saveEdit(m.id);if(e.key==="Escape")cancelEdit();}}
+                  <datalist id="role-options-edit">{roles.map(r=><option key={r} value={r}/>)}</datalist>
+                  <input className="team-hide-tablet" value={editForm.phone} onChange={e=>setEditForm(f=>({...f,phone:fmtPhone(e.target.value)}))} onKeyDown={e=>{if(e.key==="Enter")saveEdit(m.id);if(e.key==="Escape")cancelEdit();}}
                     style={editInputSt}/>
-                  <input value={editForm.email} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")saveEdit(m.id);if(e.key==="Escape")cancelEdit();}}
+                  <input className="team-hide-mobile" value={editForm.email} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")saveEdit(m.id);if(e.key==="Escape")cancelEdit();}}
                     style={editInputSt}/>
-                  <span style={{fontSize:12,color:C.muted}}>{taskCounts[m.name]||0}</span>
-                  <span style={{fontSize:12,color:activeCounts[m.name]?C.accent:C.faint}}>{activeCounts[m.name]||0}</span>
+                  <span className="team-hide-mobile" style={{fontSize:12,color:C.muted}}>{taskCounts[m.name]||0}</span>
+                  <span className="team-hide-mobile" style={{fontSize:12,color:activeCounts[m.name]?C.accent:C.faint}}>{activeCounts[m.name]||0}</span>
                   <span style={{fontSize:11,color:statusColor}}>{statusLabel}</span>
                   <div style={{display:"flex",gap:4}}>
                     <button onClick={()=>saveEdit(m.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.green}} title="Save">✓</button>
@@ -4795,11 +4893,11 @@ function TeamView({team, setTeam, tasks, projects}) {
               ) : (
                 <Fragment>
                   <span style={{fontSize:13,fontWeight:500,color:C.text}}>{m.name}</span>
-                  <span style={{fontSize:12,color:C.muted}}>{m.role||"—"}</span>
-                  <span style={{fontSize:12,color:C.muted}}>{m.phone||"—"}</span>
-                  <span style={{fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email||"—"}</span>
-                  <span style={{fontSize:12,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{taskCounts[m.name]||0}</span>
-                  <span style={{fontSize:12,color:activeCounts[m.name]?C.accent:C.faint,fontVariantNumeric:"tabular-nums"}}>{activeCounts[m.name]||0}</span>
+                  <span className="team-hide-tablet" style={{fontSize:12,color:C.muted,display:"flex",alignItems:"center",gap:5}}>{m.role?<><span style={{width:7,height:7,borderRadius:"50%",background:roleColor(m.role),flexShrink:0}}/>{m.role}</>:"—"}</span>
+                  <span className="team-hide-tablet" style={{fontSize:12,color:C.muted}}>{m.phone||"—"}</span>
+                  <span className="team-hide-mobile" style={{fontSize:12,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email||"—"}</span>
+                  <span className="team-hide-mobile" style={{fontSize:12,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{taskCounts[m.name]||0}</span>
+                  <span className="team-hide-mobile" style={{fontSize:12,color:activeCounts[m.name]?C.accent:C.faint,fontVariantNumeric:"tabular-nums"}}>{activeCounts[m.name]||0}</span>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
                     {m.user_id ? (
                       <span style={{fontSize:11,color:C.green,fontWeight:500}}>Joined</span>
@@ -4873,11 +4971,11 @@ function BudgetView({projects, phases, expenses, tasks, proceeds, setProceeds, o
   const tabs = [{id:"cashflow",label:"Cash Flow"},{id:"pl",label:"P & L"},{id:"proceeds",label:"Proceeds"}];
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:1060}}>
+    <div className="page-pad" style={{maxWidth:1060}}>
       <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px",marginBottom:20}}>Budget</h2>
 
       {/* ── Summary cards ─────────────────────────────────────────────────── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.border,marginBottom:20}}>
+      <div className="stat-grid-4" style={{gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden",background:C.border,marginBottom:20}}>
         {[
           {l:"Total Proceeds",  v:fmtM(totalProceeds),  sub:"money in",               color:C.green},
           {l:"Actual Spend",    v:fmtM(totalActual),    sub:"money out",               color:totalActual>0?"#C0392B":C.muted},
@@ -4922,7 +5020,7 @@ function BudgetView({projects, phases, expenses, tasks, proceeds, setProceeds, o
           {showAddProceed&&(
             <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:18,marginBottom:14}}>
               <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:12}}>New proceed</p>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+              <div className="form-2col" style={{marginBottom:10}}>
                 <div>
                   <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Source / Label</p>
                   <Input value={proceedForm.label} onChange={v=>setProceedForm(f=>({...f,label:v}))} placeholder="e.g. March paycheck, Seller credit"/>
@@ -5053,7 +5151,7 @@ function PhasesView({phases, projects, onNavigate, onAddPhase, onUpdatePhase, on
   };
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:800}}>
+    <div className="page-pad" style={{maxWidth:800}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Phases</h2>
         <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>+ Add phase</Btn>
@@ -5237,7 +5335,7 @@ function ProjectsView({phases, projects, setProjects, tasks, expenses, onNavigat
   };
 
   return (
-    <div style={{padding:"32px 40px",maxWidth:800}}>
+    <div className="page-pad" style={{maxWidth:800}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
         <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>Projects</h2>
         <Btn variant="primary" onClick={()=>setShowAdd(s=>!s)}>+ Add project</Btn>
@@ -5279,7 +5377,7 @@ function ProjectsView({phases, projects, setProjects, tasks, expenses, onNavigat
       {showAdd&&(
         <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:20,marginBottom:24}}>
           <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:14}}>New project</p>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div className="form-2col" style={{marginBottom:10}}>
             <div style={{gridColumn:"1/-1"}}>
               <p style={{fontSize:11,color:C.muted,marginBottom:4,fontWeight:500}}>Name</p>
               <Input value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. HVAC, Kitchen, Exterior"/>
@@ -5376,7 +5474,7 @@ function LoginPage({onLogin}) {
 
   return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
-      <div style={{width:360,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:36,boxShadow:"0 4px 24px rgba(0,0,0,0.07)"}}>
+      <div style={{width:"min(360px, calc(100vw - 32px))",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"clamp(20px,5vw,36px)",boxShadow:"0 4px 24px rgba(0,0,0,0.07)"}}>
         <p style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px",marginBottom:4}}>4602 Banks</p>
         <p style={{fontSize:13,color:C.muted,marginBottom:28}}>Sign in to continue</p>
         <div style={{marginBottom:14}}>
@@ -5408,6 +5506,7 @@ export default function App() {
   const [session,   setSession]   = useState(null);
   const [loading,   setLoading]   = useState(false);
   const [view,      setView]      = useState("dashboard");
+  const [sideOpen,  setSideOpen]  = useState(false);
   const [phases,    setPhases]     = useState([]);
   const [sidebarAddingPhase, setSidebarAddingPhase] = useState(null);
   const [sidebarNewProject,  setSidebarNewProject]  = useState("");
@@ -5541,16 +5640,35 @@ export default function App() {
             );
             Promise.all(cInserts).then(idPairs=>{
               const cIdMap = Object.fromEntries(idPairs.filter(Boolean));
-              q.items.forEach((item,i)=>{
-                sbInsertRow("quote_items",{quote_id:quoteId,label:item.label,sort_order:i}).then(ir=>{
-                  if(!ir?.[0]) return;
-                  const dbItemId = ir[0].id;
-                  Object.entries(item.amounts||{}).forEach(([localCId,amount])=>{
-                    const dbCId = cIdMap[localCId];
-                    if(dbCId && amount) sbInsertRow("quote_item_amounts",{quote_item_id:dbItemId,contractor_id:dbCId,amount}).catch(console.error);
+              // Per-contractor items model
+              const hasPerC = q.contractors.some(c=>c.items);
+              if(hasPerC){
+                // Collect all unique labels, insert as quote_items, then link amounts per contractor
+                const allLabels=[...new Set(q.contractors.flatMap(c=>(c.items||[]).map(i=>i.label)))];
+                const labelInserts=allLabels.map((label,i)=>sbInsertRow("quote_items",{quote_id:quoteId,label,sort_order:i}).then(ir=>ir?.[0]?[label,ir[0].id]:null));
+                Promise.all(labelInserts).then(pairs=>{
+                  const labelMap=Object.fromEntries(pairs.filter(Boolean));
+                  q.contractors.forEach(c=>{
+                    const dbCId=cIdMap[c.id];if(!dbCId)return;
+                    (c.items||[]).forEach(item=>{
+                      const dbItemId=labelMap[item.label];
+                      if(dbItemId&&item.amount) sbInsertRow("quote_item_amounts",{quote_item_id:dbItemId,contractor_id:dbCId,amount:item.amount}).catch(console.error);
+                    });
                   });
-                }).catch(console.error);
-              });
+                });
+              } else {
+                // Legacy shared items model
+                (q.items||[]).forEach((item,i)=>{
+                  sbInsertRow("quote_items",{quote_id:quoteId,label:item.label,sort_order:i}).then(ir=>{
+                    if(!ir?.[0]) return;
+                    const dbItemId = ir[0].id;
+                    Object.entries(item.amounts||{}).forEach(([localCId,amount])=>{
+                      const dbCId = cIdMap[localCId];
+                      if(dbCId && amount) sbInsertRow("quote_item_amounts",{quote_item_id:dbItemId,contractor_id:dbCId,amount}).catch(console.error);
+                    });
+                  }).catch(console.error);
+                });
+              }
             });
           }).catch(console.error);
         }).catch(console.error);
@@ -5558,6 +5676,14 @@ export default function App() {
       });
     }, 1000);
   },[]);
+
+  const addContractorToTeam = useCallback(({name,phone,email})=>{
+    // Skip if already on team
+    if((team||[]).some(m=>m.name.toLowerCase()===name.toLowerCase())) return;
+    sbInsertRow("team_members",{name,phone:phone||"",email:email||"",role:"Contractor"})
+      .then(rows=>{if(rows?.[0]) setTeam(prev=>[...prev,rows[0]]);})
+      .catch(console.error);
+  },[team]);
 
   if(!session) return <LoginPage onLogin={handleLogin}/>;
 
@@ -5582,16 +5708,32 @@ export default function App() {
         const cInserts=newQuote.contractors.map((c,i)=>sbInsertRow("quote_contractors",{quote_id:dbId,name:c.name,phone:c.phone||"",email:c.email||"",sort_order:i}).then(cr=>[c.id,cr?.[0]?.id]));
         Promise.all(cInserts).then(idMap=>{
           const cIdMap=Object.fromEntries(idMap.filter(Boolean));
-          newQuote.items.forEach((item,i)=>{
-            sbInsertRow("quote_items",{quote_id:dbId,label:item.label,sort_order:i}).then(ir=>{
-              if(!ir?.[0]) return;
-              const dbItemId=ir[0].id;
-              Object.entries(item.amounts).forEach(([localCId,amount])=>{
-                const dbCId=cIdMap[localCId];
-                if(dbCId) sbInsertRow("quote_item_amounts",{quote_item_id:dbItemId,contractor_id:dbCId,amount}).catch(console.error);
+          const hasPerC=newQuote.contractors.some(c=>c.items);
+          if(hasPerC){
+            const allLabels=[...new Set(newQuote.contractors.flatMap(c=>(c.items||[]).map(i=>i.label)))];
+            const labelInserts=allLabels.map((label,i)=>sbInsertRow("quote_items",{quote_id:dbId,label,sort_order:i}).then(ir=>ir?.[0]?[label,ir[0].id]:null));
+            Promise.all(labelInserts).then(pairs=>{
+              const labelMap=Object.fromEntries(pairs.filter(Boolean));
+              newQuote.contractors.forEach(c=>{
+                const dbCId=cIdMap[c.id];if(!dbCId)return;
+                (c.items||[]).forEach(item=>{
+                  const dbItemId=labelMap[item.label];
+                  if(dbItemId&&item.amount) sbInsertRow("quote_item_amounts",{quote_item_id:dbItemId,contractor_id:dbCId,amount:item.amount}).catch(console.error);
+                });
               });
-            }).catch(console.error);
-          });
+            });
+          } else {
+            (newQuote.items||[]).forEach((item,i)=>{
+              sbInsertRow("quote_items",{quote_id:dbId,label:item.label,sort_order:i}).then(ir=>{
+                if(!ir?.[0]) return;
+                const dbItemId=ir[0].id;
+                Object.entries(item.amounts||{}).forEach(([localCId,amount])=>{
+                  const dbCId=cIdMap[localCId];
+                  if(dbCId) sbInsertRow("quote_item_amounts",{quote_item_id:dbItemId,contractor_id:dbCId,amount}).catch(console.error);
+                });
+              }).catch(console.error);
+            });
+          }
         });
       }).catch(console.error);
       return;
@@ -5639,7 +5781,7 @@ export default function App() {
   const activeProject=showProjectPage?projects.find(p=>p.id===page.projectId):null;
   const userEmail = session?.user?.email || "";
 
-  const nav=[{id:"dashboard",label:"Overview"},{id:"phases",label:"Phases"},{id:"projects",label:"Projects"},{id:"timeline",label:"Timeline"},{id:"tasks",label:"Tasks"},{id:"quotes",label:"Quotes"},{id:"team",label:"Team"},{id:"events",label:"Events"},{id:"settings",label:"Settings"}];
+  const nav=[{id:"dashboard",label:"Overview"},{id:"timeline",label:"Timeline"},{id:"tasks",label:"Tasks"},{id:"projects",label:"Projects"},{id:"phases",label:"Phases"},{id:"events",label:"Events"},{id:"quotes",label:"Quotes"},{id:"team",label:"Team"}];
 
   if(loading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
@@ -5651,8 +5793,56 @@ export default function App() {
 
   return (
     <div style={{display:"flex",height:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",overflow:"hidden"}}>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-thumb{background:#D5D5D3;border-radius:3px;}button:focus{outline:none;}textarea,input,select{font-family:inherit;}select{-webkit-appearance:none;}`}</style>
-      <div style={{width:220,background:C.sidebar,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",flexShrink:0,padding:"16px 8px"}}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-thumb{background:#D5D5D3;border-radius:3px;}button:focus{outline:none;}textarea,input,select{font-family:inherit;}select{-webkit-appearance:none;}
+.app-sidebar{width:220px;flex-shrink:0;transition:transform 0.2s;}
+.app-main{flex:1;overflow-y:auto;position:relative;}
+.mob-header{display:none;}
+.mob-overlay{display:none;}
+.page-pad{padding:32px 40px;}
+.stat-grid-5{display:grid;grid-template-columns:repeat(5,1fr);}
+.stat-grid-4{display:grid;grid-template-columns:repeat(4,1fr);}
+.dash-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+.quote-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start;}
+.contractor-grid{display:grid;gap:12px;}
+.team-table{display:grid;grid-template-columns:40px 1fr 100px 120px 170px 70px 50px 90px 50px;}
+.task-detail-grid{display:grid;grid-template-columns:1fr 280px;gap:24px;}
+.form-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.peek-panel{position:fixed;top:0;right:0;bottom:0;width:480px;z-index:51;}
+@media(max-width:1024px){
+  .stat-grid-5{grid-template-columns:repeat(3,1fr);}
+  .stat-grid-4{grid-template-columns:repeat(2,1fr);}
+  .quote-grid{grid-template-columns:repeat(2,1fr);}
+  .team-table{grid-template-columns:40px 1fr 100px 170px 90px 50px;}
+  .team-table .team-hide-tablet{display:none;}
+  .task-detail-grid{grid-template-columns:1fr;}
+}
+@media(max-width:768px){
+  .app-sidebar{position:fixed;top:0;left:0;bottom:0;z-index:100;transform:translateX(-100%);}
+  .app-sidebar.open{transform:translateX(0);}
+  .mob-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid ${C.border};background:${C.surface};position:sticky;top:0;z-index:10;}
+  .mob-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:99;}
+  .mob-overlay.open{display:block;}
+  .page-pad{padding:16px;}
+  .stat-grid-5{grid-template-columns:repeat(2,1fr);}
+  .stat-grid-4{grid-template-columns:repeat(2,1fr);}
+  .dash-cols{grid-template-columns:1fr;}
+  .quote-grid{grid-template-columns:1fr;}
+  .contractor-grid{grid-template-columns:1fr !important;}
+  .team-table{grid-template-columns:40px 1fr 90px 50px;}
+  .team-table .team-hide-tablet,.team-table .team-hide-mobile{display:none;}
+  .task-detail-grid{grid-template-columns:1fr;}
+  .form-2col{grid-template-columns:1fr;}
+  .peek-panel{width:100%;left:0;}
+}
+@media(max-width:480px){
+  .stat-grid-5{grid-template-columns:1fr 1fr;}
+  .stat-grid-4{grid-template-columns:1fr 1fr;}
+  .page-pad{padding:12px;}
+}
+`}</style>
+      {/* Mobile overlay */}
+      <div className={`mob-overlay${sideOpen?" open":""}`} onClick={()=>setSideOpen(false)}/>
+      <div className={`app-sidebar${sideOpen?" open":""}`} style={{background:C.sidebar,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",padding:"16px 8px"}}>
         <div style={{padding:"8px 10px 16px"}}>
           <p style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:"-0.2px"}}>4602 Banks</p>
           <p style={{fontSize:11,color:C.muted,marginTop:2}}>New Orleans, LA</p>
@@ -5660,7 +5850,7 @@ export default function App() {
         <div style={{height:1,background:C.divider,margin:"0 10px 10px"}}/>
         <nav style={{flex:1,overflowY:"auto"}}>
           {nav.map(item=>{const active=view===item.id&&!showProjectPage;return(
-            <button key={item.id} onClick={()=>{setView(item.id);setPage(null);}} style={{display:"flex",alignItems:"center",width:"100%",padding:"7px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:13,fontWeight:active?500:400,textAlign:"left",transition:"background 0.1s"}}>
+            <button key={item.id} onClick={()=>{setView(item.id);setPage(null);setSideOpen(false);}} style={{display:"flex",alignItems:"center",width:"100%",padding:"7px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:13,fontWeight:active?500:400,textAlign:"left",transition:"background 0.1s"}}>
               {item.label}
             </button>
           );})}
@@ -5678,7 +5868,7 @@ export default function App() {
                     style={{background:"none",border:"none",cursor:"pointer",color:C.faint,fontSize:14,padding:"0 2px",lineHeight:1,opacity:0,transition:"opacity 0.1s"}}>+</button>
                 </div>
                 {faProjects.map(pr=>{const active=showProjectPage&&page.projectId===pr.id;return(
-                  <button key={pr.id} onClick={()=>navigate("project",pr.id)} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:12,textAlign:"left",transition:"background 0.1s"}}>
+                  <button key={pr.id} onClick={()=>{navigate("project",pr.id);setSideOpen(false);}} style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",marginBottom:1,background:active?C.hover:"transparent",color:active?C.text:C.sideText,fontSize:12,textAlign:"left",transition:"background 0.1s"}}>
                     <div style={{width:6,height:6,borderRadius:2,background:pc(pr.id),flexShrink:0}}/>{pr.name}
                   </button>
                 );})}
@@ -5707,30 +5897,40 @@ export default function App() {
             );
           })}
         </nav>
-        <div style={{padding:"10px",borderTop:`1px solid ${C.divider}`,marginTop:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-            <div style={{width:7,height:7,borderRadius:"50%",background:C.green}}/>
+        <div style={{padding:"10px",borderTop:`1px solid ${C.divider}`,marginTop:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+            <div style={{width:7,height:7,borderRadius:"50%",background:C.green,flexShrink:0}}/>
             <span style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{userEmail}</span>
           </div>
+          <button onClick={()=>{setView("settings");setPage(null);setSideOpen(false);}} style={{background:view==="settings"?C.hover:"transparent",border:"none",cursor:"pointer",padding:5,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} title="Settings">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.5 1.5h3l.4 1.6.7.3 1.5-.8 2.1 2.1-.8 1.5.3.7 1.6.4v3l-1.6.4-.3.7.8 1.5-2.1 2.1-1.5-.8-.7.3-.4 1.6h-3l-.4-1.6-.7-.3-1.5.8-2.1-2.1.8-1.5-.3-.7L.7 9.5v-3l1.6-.4.3-.7-.8-1.5L3.9 1.8l1.5.8.7-.3z" stroke={view==="settings"?C.text:C.faint} strokeWidth="1.2" fill="none"/><circle cx="8" cy="8" r="2" stroke={view==="settings"?C.text:C.faint} strokeWidth="1.2" fill="none"/></svg>
+          </button>
         </div>
       </div>
 
       {/* Main area */}
-      <div style={{flex:1,overflowY:"auto",position:"relative"}}>
-        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} initialTaskId={page?.taskId||null} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onDeleteTask={deleteTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team}/>}
+      <div className="app-main">
+        {/* Mobile header */}
+        <div className="mob-header">
+          <button onClick={()=>setSideOpen(true)} style={{background:"none",border:"none",cursor:"pointer",padding:4}}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke={C.text} strokeWidth="2" strokeLinecap="round"/></svg>
+          </button>
+          <span style={{fontSize:14,fontWeight:600,color:C.text}}>4602 Banks</span>
+        </div>
+        {showProjectPage&&activeProject&&<ProjectPage project={activeProject} tasks={tasks} expenses={expenses} quotes={quotes} phases={phases} initialTaskId={page?.taskId||null} onNavigate={navigate} onUpdateProject={updateProject} onUpdateTask={updateTask} onDeleteTask={deleteTask} onUpdateQuote={updateQuote} onAddTasks={addTasks} onAddBudgetItems={addBudgetItems} onDeleteProject={deleteProject} onAddEvent={ev=>setEvents(prev=>[...prev,ev])} team={team} onAwardContractor={addContractorToTeam}/>}
         {!showProjectPage&&<>
           {view==="phases"   &&<PhasesView phases={phases} projects={projects} onNavigate={navigate} onAddPhase={fa=>setPhases(prev=>[...prev,fa])} onUpdatePhase={(id,upd)=>setPhases(prev=>prev.map(f=>f.id===id?{...f,...upd}:f))} onDeletePhase={id=>setPhases(prev=>prev.filter(f=>f.id!==id))}/> }
-          {view==="dashboard"&&<Dashboard projects={projects} phases={phases} tasks={tasks} expenses={expenses} events={events} proceeds={proceeds} onNavigate={navigate} quotes={quotes}/>}
+          {view==="dashboard"&&<Dashboard projects={projects} phases={phases} tasks={tasks} setTasks={setTasks} expenses={expenses} events={events} proceeds={proceeds} onNavigate={navigate} quotes={quotes} team={team} session={session}/>}
           {view==="projects"   &&<ProjectsView phases={phases} projects={projects} setProjects={setProjects} tasks={tasks} expenses={expenses} onNavigate={navigate} onAddProject={p=>setProjects(prev=>[...prev,p])} quotes={quotes}/>}
-          {view==="timeline" &&<TimelineView projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} onNavigate={navigate} proceeds={proceeds} setProceeds={setProceeds} phases={phases} expenses={expenses} quotes={quotes} updateQuote={updateQuote} team={team} events={events} setEvents={setEvents} onDeleteTask={deleteTask}/>}
-          {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate}/>}
+          {view==="timeline" &&<TimelineView projects={projects} setProjects={setProjects} tasks={tasks} setTasks={setTasks} onNavigate={navigate} proceeds={proceeds} setProceeds={setProceeds} phases={phases} expenses={expenses} quotes={quotes} updateQuote={updateQuote} team={team} events={events} setEvents={setEvents} onDeleteTask={deleteTask} onAwardContractor={addContractorToTeam}/>}
+          {view==="weekly"   &&<WeeklyView projects={projects} tasks={tasks} setTasks={setTasks} onNavigate={navigate} team={team}/>}
           {view==="tasks"    &&<TasksGrid tasks={tasks} setTasks={setTasks} projects={projects} setProjects={setProjects} onNavigate={navigate} team={team} setTeam={setTeam} onDeleteTask={deleteTask} quotes={quotes}/>}
-          {view==="quotes"   &&<QuotesView quotes={quotes} projects={projects} tasks={tasks} setQuotes={setQuotes} setTasks={setTasks} updateQuote={updateQuote} onNavigate={navigate}/>}
+          {view==="quotes"   &&<QuotesView quotes={quotes} projects={projects} tasks={tasks} setQuotes={setQuotes} setTasks={setTasks} updateQuote={updateQuote} onNavigate={navigate} onAwardContractor={addContractorToTeam}/>}
 
           {view==="team"     &&<TeamView team={team} setTeam={setTeam} tasks={tasks} projects={projects}/>}
           {view==="events"   &&<EventsView events={events} setEvents={setEvents} projects={projects}/>}
           {view==="settings" &&(
-            <div style={{padding:"32px 40px",maxWidth:500}}>
+            <div className="page-pad" style={{maxWidth:500}}>
               <h2 style={{fontSize:18,fontWeight:700,color:C.text,letterSpacing:"-0.2px",marginBottom:20}}>Settings</h2>
               <div style={{border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,padding:18,marginBottom:16}}>
                 <p style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:3}}>iCal sync</p>
@@ -5765,7 +5965,7 @@ export default function App() {
         {/* Global AI slide-up panel */}
         {globalAI&&(
           <div style={{
-            position:"fixed",bottom:80,right:24,width:480,maxHeight:"70vh",
+            position:"fixed",bottom:80,right:24,width:"min(480px, calc(100vw - 48px))",maxHeight:"70vh",
             borderRadius:12,boxShadow:"0 8px 32px rgba(0,0,0,0.16)",
             border:`1px solid ${C.border}`,background:C.surface,
             overflowY:"auto",zIndex:99,
