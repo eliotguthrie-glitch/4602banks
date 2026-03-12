@@ -2271,13 +2271,15 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const panLeft=()=>{ const d=Math.max(7,Math.round(projDays*0.25)); setRange(addDays(pS,-d),addDays(pE,-d)); };
   const panRight=()=>{ const d=Math.max(7,Math.round(projDays*0.25)); setRange(addDays(pS,d),addDays(pE,d)); };
   const onWheel=useCallback(e=>{
-    const dx=e.deltaX||e.shiftKey&&e.deltaY;
-    if(!dx)return;
+    const dx=e.deltaX||(e.shiftKey?e.deltaY:0);
+    if(!dx||Math.abs(dx)<Math.abs(e.deltaY))return; // let vertical scroll pass through
     e.preventDefault();
     const days=Math.round(dx/40)*Math.max(1,Math.round(projDays/60));
     if(days)setTlRange(prev=>({start:addDays(prev.start,days),end:addDays(prev.end,days)}));
   },[projDays]);
   const containerRef=useRef(null);
+  const headerRef=useRef(null);
+  const [headerH,setHeaderH]=useState(38);
   const [drag,setDrag]=useState(null);
   const [dragTip,setDragTip]=useState(null); // {x,y,text}
   const [groupBy,setGroupBy]=useState("phase"); // "phase" | "assignee" | "all"
@@ -2285,6 +2287,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const [hideDoneEvents,setHideDoneEvents]=useState(false);
   const [showCashFlow,setShowCashFlow]=useState(true);
 
+  useEffect(()=>{if(headerRef.current)setHeaderH(headerRef.current.getBoundingClientRect().height);},[projDays]);
   const [cfLines,setCfLines]=useState({actual:true,projected:true});
   const toggleCfLine=k=>setCfLines(prev=>({...prev,[k]:!prev[k]}));
   const [showProceeds,setShowProceeds]=useState(true);
@@ -2579,7 +2582,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const cfOutNow = cashFlow.valAt(cashFlow.cumOut, TODAY);
 
   return (
-    <div style={{padding:"28px 40px",userSelect:"none",cursor:drag?(drag.type==="resize"?"ew-resize":"grabbing"):"default"}}>
+    <div className="page-pad" style={{userSelect:"none",cursor:drag?(drag.type==="resize"?"ew-resize":"grabbing"):"default"}}>
       {/* Drag date tooltip */}
       {dragTip&&(()=>{const nearRight=dragTip.x>window.innerWidth-180;return <div style={{position:"fixed",...(nearRight?{right:window.innerWidth-dragTip.x+12}:{left:dragTip.x+12}),top:dragTip.y-32,background:C.text,color:C.bg,fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>{dragTip.text}</div>;})()}
       {/* Header row */}
@@ -2601,9 +2604,9 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         </div>
       </div>
 
-      <div ref={containerRef} onWheel={onWheel} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",maxHeight:"calc(100vh - 120px)",overflowY:"auto",position:"relative"}}>
+      <div ref={containerRef} onWheel={onWheel} style={{border:`1px solid ${C.border}`,borderRadius:10,background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",position:"relative"}}>
         {/* ── Sticky top section ──────────────────────────────── */}
-        <div style={{position:"sticky",top:0,zIndex:10,borderBottom:`2px solid ${C.border}`}}>
+        <div ref={headerRef} style={{position:"sticky",top:0,zIndex:10,borderBottom:`2px solid ${C.border}`}}>
         <div style={{background:C.surface}}>
         {/* Month header */}
         <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:"transparent"}}>
@@ -2644,6 +2647,9 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
             </div>
           </div>
         )}
+
+        </div>{/* end background surface */}
+        </div>{/* end sticky month header */}
 
         {/* ── Proceeds rows at top ─────────────────────────── */}
         <div style={{borderBottom:`1px solid ${C.border}`}}>
@@ -2861,9 +2867,8 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           </>}
         </div>
 
-        </div>{/* end solid background */}
         {/* ── Inline Cash Flow chart ─────────────────────────── */}
-        <div style={{background:"rgba(255,255,255,0.75)"}}>
+        <div style={{position:"sticky",top:headerH+2,zIndex:9,background:"rgba(255,255,255,0.75)",borderBottom:`1px solid ${C.border}`}}>
           <div style={{display:"flex",alignItems:"center",height:36,background:"transparent"}}>
             <div onClick={()=>setShowCashFlow(s=>!s)} style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showCashFlow?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s"}}>
@@ -2903,7 +2908,6 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           })()}
         </div>
 
-        </div>{/* end sticky top section */}
         {/* ── Task controls ────────────────────────────────────── */}
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",background:C.bg,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:11,color:C.muted,fontWeight:600,marginRight:2,textTransform:"uppercase",letterSpacing:"0.04em"}}>Group by</span>
