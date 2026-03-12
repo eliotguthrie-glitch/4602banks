@@ -2533,9 +2533,11 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         </div>
       </div>
 
-      <div ref={containerRef} onWheel={onWheel} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)"}}>
+      <div ref={containerRef} onWheel={onWheel} style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden",background:C.surface,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",maxHeight:"calc(100vh - 120px)",overflowY:"auto",position:"relative"}}>
+        {/* ── Sticky top section ──────────────────────────────── */}
+        <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(255,255,255,0.82)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)",borderBottom:`2px solid ${C.border}`}}>
         {/* Month header */}
-        <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:C.bg,flexShrink:0}}>
+        <div style={{display:"flex",borderBottom:projDays<=45?"none":`1px solid ${C.border}`,background:"transparent"}}>
           <div style={{width:LCOL,flexShrink:0,padding:"10px 20px",borderRight:`1px solid ${C.border}`}}>
             <span style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>{colLabel}</span>
           </div>
@@ -2550,7 +2552,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         </div>
         {/* Week/day sub-header when zoomed in */}
         {projDays<=90&&projDays>45&&(
-          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.bg}}>
+          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:"transparent"}}>
             <div style={{width:LCOL,flexShrink:0,borderRight:`1px solid ${C.border}`}}/>
             <div style={{flex:1,position:"relative",height:22}}>
               {weekLines.map((w,i)=>(
@@ -2562,7 +2564,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           </div>
         )}
         {projDays<=45&&(
-          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.bg}}>
+          <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:"transparent"}}>
             <div style={{width:LCOL,flexShrink:0,borderRight:`1px solid ${C.border}`}}/>
             <div style={{flex:1,position:"relative",height:22}}>
               {dayLines.map((d,i)=>(
@@ -2575,8 +2577,8 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         )}
 
         {/* ── Proceeds rows at top ─────────────────────────── */}
-        <div style={{borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-          <div onClick={()=>setShowProceeds(s=>!s)} style={{display:"flex",alignItems:"center",height:36,background:C.bg,cursor:"pointer"}}>
+        <div style={{borderBottom:`1px solid ${C.border}`}}>
+          <div onClick={()=>setShowProceeds(s=>!s)} style={{display:"flex",alignItems:"center",height:36,background:"transparent",cursor:"pointer"}}>
             <div style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8}}>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showProceeds?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s",flexShrink:0}}>
                 <path d="M3 1.5L7 5L3 8.5" stroke={C.muted} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
@@ -2686,8 +2688,8 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         </div>
 
         {/* ── Events rows ─────────────────────────────────────── */}
-        <div style={{borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-          <div onClick={()=>setShowEvents(s=>!s)} style={{display:"flex",alignItems:"center",height:36,background:C.bg,cursor:"pointer"}}>
+        <div style={{borderBottom:`1px solid ${C.border}`}}>
+          <div onClick={()=>setShowEvents(s=>!s)} style={{display:"flex",alignItems:"center",height:36,background:"transparent",cursor:"pointer"}}>
             <div style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8}}>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showEvents?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s",flexShrink:0}}>
                 <path d="M3 1.5L7 5L3 8.5" stroke={C.muted} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
@@ -2791,8 +2793,8 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
         </div>
 
         {/* ── Inline Cash Flow chart ─────────────────────────── */}
-        <div style={{borderBottom:`2px solid ${C.border}`,flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",height:36,background:C.bg}}>
+        <div style={{borderBottom:`2px solid ${C.border}`}}>
+          <div style={{display:"flex",alignItems:"center",height:36,background:"transparent"}}>
             <div onClick={()=>setShowCashFlow(s=>!s)} style={{width:LCOL,flexShrink:0,padding:"0 20px",borderRight:`1px solid ${C.border}`,height:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
               <svg width="10" height="10" viewBox="0 0 10 10" style={{transform:showCashFlow?"rotate(90deg)":"rotate(0)",transition:"transform 0.15s"}}>
                 <path d="M3 1.5L7 5L3 8.5" stroke={C.muted} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
@@ -2831,8 +2833,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
           })()}
         </div>
 
-        {/* ── Scrollable task area ───────────────────────────── */}
-        <div style={{flex:1,overflowY:"auto"}}>
+        </div>{/* end sticky top section */}
         {/* ── Task controls ────────────────────────────────────── */}
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",background:C.bg,borderBottom:`1px solid ${C.border}`}}>
           <span style={{fontSize:11,color:C.muted,fontWeight:600,marginRight:2,textTransform:"uppercase",letterSpacing:"0.04em"}}>Group by</span>
@@ -3061,7 +3062,6 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
             </div>
           </div>
         )}
-        </div>{/* end scrollable task area */}
       </div>
 
       {/* ── Side peek panels ─────────────────────────────────── */}
