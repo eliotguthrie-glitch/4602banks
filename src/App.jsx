@@ -2288,6 +2288,15 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const [showCashFlow,setShowCashFlow]=useState(true);
 
   useEffect(()=>{if(headerRef.current)setHeaderH(headerRef.current.getBoundingClientRect().height);},[projDays]);
+  const [cfExclude,setCfExclude]=useState(new Set()); // task IDs excluded from cash flow
+  const [cfExcludeProj,setCfExcludeProj]=useState(new Set()); // project IDs excluded from cash flow
+  const toggleCfTask=id=>setCfExclude(prev=>{const n=new Set(prev);if(n.has(id))n.delete(id);else n.add(id);return n;});
+  const toggleCfProj=id=>{
+    setCfExcludeProj(prev=>{const n=new Set(prev);if(n.has(id))n.delete(id);else n.add(id);return n;});
+    // also toggle all tasks in that project
+    const projTasks=tasks.filter(t=>t.project_id===id&&!t.parent_task_id);
+    setCfExclude(prev=>{const n=new Set(prev);const excluding=!cfExcludeProj.has(id);projTasks.forEach(t=>{if(excluding)n.add(t.id);else n.delete(t.id);});return n;});
+  };
   const [cfLines,setCfLines]=useState({actual:true,projected:true});
   const toggleCfLine=k=>setCfLines(prev=>({...prev,[k]:!prev[k]}));
   const [showProceeds,setShowProceeds]=useState(true);
@@ -2545,9 +2554,10 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
   const cashFlow = useMemo(()=>{
     // Gather all money-in events (proceeds) and money-out events (actual costs on tasks)
     const ins = (proceeds||[]).filter(p=>p.received_date).map(p=>({date:p.received_date, amount:parseFloat(p.amount)||0})).sort((a,b)=>a.date.localeCompare(b.date));
-    const outs = tasks.filter(t=>taskTotalAct(t,tasks)>0 && t.end && !t.parent_task_id).map(t=>({date:t.end, amount:taskTotalAct(t,tasks)})).sort((a,b)=>a.date.localeCompare(b.date));
+    const cfIncluded = t => !t.parent_task_id && !cfExclude.has(t.id) && !cfExcludeProj.has(t.project_id);
+    const outs = tasks.filter(t=>cfIncluded(t) && taskTotalAct(t,tasks)>0 && t.end).map(t=>({date:t.end, amount:taskTotalAct(t,tasks)})).sort((a,b)=>a.date.localeCompare(b.date));
     // Projected costs: for each task use actual if available, otherwise estimate
-    const projAll = tasks.filter(t=>!t.parent_task_id && t.end && (taskTotalAct(t,tasks)>0||taskTotalEst(t,tasks,quotes)>0)).map(t=>({date:t.end, amount:taskTotalAct(t,tasks)||taskTotalEst(t,tasks,quotes)})).sort((a,b)=>a.date.localeCompare(b.date));
+    const projAll = tasks.filter(t=>cfIncluded(t) && t.end && (taskTotalAct(t,tasks)>0||taskTotalEst(t,tasks,quotes)>0)).map(t=>({date:t.end, amount:taskTotalAct(t,tasks)||taskTotalEst(t,tasks,quotes)})).sort((a,b)=>a.date.localeCompare(b.date));
 
     // Combine all dates for point-in-time calculation
     const allDates = [...new Set([...ins.map(e=>e.date),...outs.map(e=>e.date),...projAll.map(e=>e.date),pS,pE])].sort();
@@ -2573,7 +2583,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
     const yRange = (yMax - yMin) * 1.15 || 1000;
 
     return {actual, projected, yMin, yMax, yRange, cumIn, cumOut, cumProjAll, valAt};
-  },[proceeds, tasks, quotes, pS, pE]);
+  },[proceeds, tasks, quotes, pS, pE, cfExclude, cfExcludeProj]);
 
   // Cash flow summary at today
   const cfActualNow = cashFlow.valAt(cashFlow.actual, TODAY);
@@ -2945,6 +2955,7 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                   }
                   <span onClick={e=>{e.stopPropagation();if(grp.onHeaderClick)grp.onHeaderClick();}} style={{fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:grp.onHeaderClick?"pointer":"default"}}>{grp.label}</span>
                   <span style={{fontSize:11,color:C.faint,marginLeft:"auto",flexShrink:0}}>{grp.rows.length}</span>
+                  {groupBy==="phase"&&grp.key!=="unassigned"&&<button onClick={e=>{e.stopPropagation();toggleCfProj(parseInt(grp.key));}} title={cfExcludeProj.has(parseInt(grp.key))?"Excluded from cash flow — click to include":"Included in cash flow — click to exclude"} style={{marginLeft:6,background:"none",border:`1px solid ${cfExcludeProj.has(parseInt(grp.key))?C.border:C.accent}`,borderRadius:3,padding:"1px 5px",fontSize:10,fontWeight:600,cursor:"pointer",color:cfExcludeProj.has(parseInt(grp.key))?C.faint:C.accent,opacity:cfExcludeProj.has(parseInt(grp.key))?0.5:1,lineHeight:1.4,flexShrink:0}}>$</button>}
                 </div>
                 <div style={{flex:1,position:"relative",height:"100%",display:"flex",alignItems:"center"}}>
                   <Grid/>
@@ -2985,9 +2996,10 @@ function TimelineView({tasks,setTasks,projects,setProjects,onNavigate,proceeds,s
                         {hasSubs&&<span style={{fontSize:10,color:C.faint,flexShrink:0}}>{subs.filter(s=>s.status==="complete").length}/{subs.length}</span>}
                         {groupBy==="phase"&&<Avatar name={t.assignee} size={16} team={team}/>}
                       </div>
-                      {(taskTotalEst(t,tasks,quotes)>0||taskTotalAct(t,tasks)>0)&&<div style={{display:"flex",gap:8,marginTop:2}}>
+                      {(taskTotalEst(t,tasks,quotes)>0||taskTotalAct(t,tasks)>0)&&<div style={{display:"flex",gap:8,marginTop:2,alignItems:"center"}}>
                         {taskTotalEst(t,tasks,quotes)>0&&<span style={{fontSize:10,color:C.faint,fontVariantNumeric:"tabular-nums"}}>Est {fmtM(taskTotalEst(t,tasks,quotes))}</span>}
                         {taskTotalAct(t,tasks)>0&&<span style={{fontSize:10,color:taskTotalAct(t,tasks)>taskTotalEst(t,tasks,quotes)?"#c33":C.green,fontWeight:500,fontVariantNumeric:"tabular-nums"}}>Act {fmtM(taskTotalAct(t,tasks))}</span>}
+                        <span onClick={e=>{e.stopPropagation();toggleCfTask(t.id);}} title={cfExclude.has(t.id)?"Excluded from cash flow":"Included in cash flow"} style={{fontSize:9,fontWeight:700,cursor:"pointer",color:cfExclude.has(t.id)?C.faint:C.accent,opacity:cfExclude.has(t.id)?0.4:0.8,border:`1px solid ${cfExclude.has(t.id)?C.border:C.accent}`,borderRadius:3,padding:"0 3px",lineHeight:"14px",flexShrink:0}}>$</span>
                       </div>}
                     </div>
                   </div>
